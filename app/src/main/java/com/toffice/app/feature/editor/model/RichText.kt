@@ -34,18 +34,21 @@ const val FONT_DEFAULT = 0
 const val FONT_SERIF = 1
 const val FONT_SANS = 2
 const val FONT_MONO = 3
+const val FONT_CURSIVE = 4
 
 val FONT_FAMILY_NAMES = mapOf(
     FONT_DEFAULT to "افتراضي",
     FONT_SERIF to "نسخ (Serif)",
     FONT_SANS to "Sans",
     FONT_MONO to "أحادي",
+    FONT_CURSIVE to "حر (Cursive)",
 )
 
 fun fontFamilyOf(code: Int): FontFamily? = when (code) {
     FONT_SERIF -> FontFamily.Serif
     FONT_SANS -> FontFamily.SansSerif
     FONT_MONO -> FontFamily.Monospace
+    FONT_CURSIVE -> FontFamily.Cursive
     else -> null
 }
 
@@ -53,6 +56,7 @@ fun codeOfFontFamily(ff: FontFamily?): Int = when (ff) {
     FontFamily.Serif -> FONT_SERIF
     FontFamily.SansSerif -> FONT_SANS
     FontFamily.Monospace -> FONT_MONO
+    FontFamily.Cursive -> FONT_CURSIVE
     else -> FONT_DEFAULT
 }
 
@@ -61,6 +65,7 @@ fun fontNameOf(code: Int): String = when (code) {
     FONT_SERIF -> "serif"
     FONT_SANS -> "sans-serif"
     FONT_MONO -> "monospace"
+    FONT_CURSIVE -> "cursive"
     else -> "sans-serif"
 }
 
@@ -215,11 +220,14 @@ fun buildAnnotated(
     append(text)
     val paras = paragraphSpans(text)
     paras.forEachIndexed { idx, (s, e) ->
-        if (e > s) {
-            val al = aligns.getOrElse(idx) { TextAlign.Start }
-            val dir = directions.getOrElse(idx) { TextDirection.Content }
-            val ls = lineSpacings.getOrElse(idx) { 1f }
-            val ind = indents.getOrElse(idx) { 0 }
+        val al = aligns.getOrElse(idx) { TextAlign.Start }
+        val dir = directions.getOrElse(idx) { TextDirection.Content }
+        val ls = lineSpacings.getOrElse(idx) { 1f }
+        val ind = indents.getOrElse(idx) { 0 }
+        // نخزّن النمط للفقرات غير الفارغة، وكذلك للفقرة الفارغة الأخيرة إذا حملت تنسيقاً
+        // (لتبقى المحاذاة/الاتجاه مستقرّة عند بدء سطر جديد)
+        val nonDefault = al != TextAlign.Start || dir != TextDirection.Content || ls != 1f || ind > 0
+        if (e > s || nonDefault) {
             addStyle(
                 ParagraphStyle(
                     textAlign = al,

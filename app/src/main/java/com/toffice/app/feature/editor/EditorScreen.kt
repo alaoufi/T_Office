@@ -199,6 +199,7 @@ fun EditorScreen(
 
     var showMenu by remember { mutableStateOf(false) }
     var showPageSetup by remember { mutableStateOf(false) }
+    var showSaveAs by remember { mutableStateOf(false) }
 
     // تخطيط متجاوب: التابلت شريط أدوات علوي، الجوال سفلي
     val isCompact = LocalConfiguration.current.screenWidthDp < 600
@@ -225,6 +226,11 @@ fun EditorScreen(
         ActivityResultContracts.CreateDocument("application/pdf")
     ) { uri ->
         if (uri != null) viewModel.exportPdf(uri, value.annotatedString, page, header.annotatedString, footer.annotatedString)
+    }
+    val txtLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/plain")
+    ) { uri ->
+        if (uri != null) viewModel.exportText(uri, value.text)
     }
 
     fun persist() {
@@ -300,9 +306,9 @@ fun EditorScreen(
                                 onClick = { showMenu = false; persist() },
                             )
                             DropdownMenuItem(
-                                text = { Text("حفظ باسم… (DOCX)") },
+                                text = { Text("حفظ باسم…") },
                                 leadingIcon = { Icon(Icons.Default.SaveAs, null) },
-                                onClick = { showMenu = false; exportLauncher.launch("${title.ifBlank { "مستند" }}.docx") },
+                                onClick = { showMenu = false; showSaveAs = true },
                             )
                             HorizontalDivider()
                             DropdownMenuItem(
@@ -342,6 +348,21 @@ fun EditorScreen(
                     page = page,
                     onDismiss = { showPageSetup = false },
                     onApply = { newPage -> page = newPage; showPageSetup = false },
+                )
+            }
+
+            if (showSaveAs) {
+                val base = title.ifBlank { "مستند" }
+                SaveAsDialog(
+                    onDismiss = { showSaveAs = false },
+                    onPick = { fmt ->
+                        showSaveAs = false
+                        when (fmt) {
+                            SaveFormat.DOCX -> exportLauncher.launch("$base.docx")
+                            SaveFormat.PDF -> pdfLauncher.launch("$base.pdf")
+                            SaveFormat.TXT -> txtLauncher.launch("$base.txt")
+                        }
+                    },
                 )
             }
 
@@ -593,6 +614,42 @@ private fun HeaderFooterField(
             Text(value.annotatedString, fontSize = 13.sp, color = Color(0xFF777777), textAlign = TextAlign.Right, modifier = Modifier.fillMaxWidth())
         }
     }
+}
+
+enum class SaveFormat(val label: String, val ext: String) {
+    DOCX("Word مستند (DOCX)", "docx"),
+    PDF("PDF", "pdf"),
+    TXT("نص عادي (TXT)", "txt"),
+}
+
+@Composable
+private fun SaveAsDialog(onDismiss: () -> Unit, onPick: (SaveFormat) -> Unit) {
+    var fmt by remember { mutableStateOf(SaveFormat.DOCX) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("حفظ باسم — اختر الصيغة") },
+        text = {
+            Column {
+                SaveFormat.entries.forEach { f ->
+                    Row(
+                        Modifier.fillMaxWidth().clickable { fmt = f }.padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(selected = fmt == f, onClick = { fmt = f })
+                        Text(f.label, Modifier.padding(start = 4.dp))
+                    }
+                }
+                Text(
+                    "ملاحظة: صيغة DOC الثنائية القديمة غير مدعومة — استخدم DOCX.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = { onPick(fmt) }) { Text("حفظ") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } },
+    )
 }
 
 @Composable

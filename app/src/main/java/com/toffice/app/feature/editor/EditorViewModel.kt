@@ -148,6 +148,18 @@ class EditorViewModel @Inject constructor(
         }
     }
 
+    /** حفظ نصّ عادي (TXT) بترميز UTF-8. */
+    fun exportText(uri: Uri, text: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                context.contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray(Charsets.UTF_8)) }
+                _events.emit("تم الحفظ كنص (TXT)")
+            } catch (e: Exception) {
+                _events.emit("تعذّر الحفظ: ${e.message}")
+            }
+        }
+    }
+
     fun exportPdf(uri: Uri, annotated: AnnotatedString, page: PageSettings, header: AnnotatedString, footer: AnnotatedString) {
         viewModelScope.launch(Dispatchers.IO) {
             try {

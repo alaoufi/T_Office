@@ -301,6 +301,11 @@ object RichTextOps {
             val prevLine = new.text.substring(prevStart, caret - 1)
             val numMatch = NUM_DECIMAL_RE.find(prevLine)
             val bulMatch = BULLET_RE.find(prevLine)
+            val attrs = new.annotatedString.toCharAttrs()
+            val aligns = new.annotatedString.toAligns()
+            val dirs = new.annotatedString.toDirections()
+            val ls = new.annotatedString.toLineSpacings()
+            val ind = new.annotatedString.toIndents()
             val marker = when {
                 numMatch != null -> {
                     val wrap = numMatch.groupValues[1].isNotEmpty()
@@ -311,13 +316,24 @@ object RichTextOps {
                     if (wrap) "($num)$gap" else "$num$sep$gap"
                 }
                 bulMatch != null -> bulMatch.value
-                else -> return new
+                else -> null
             }
-            val attrs = new.annotatedString.toCharAttrs()
-            val aligns = new.annotatedString.toAligns()
-            val dirs = new.annotatedString.toDirections()
-            val ls = new.annotatedString.toLineSpacings()
-            val ind = new.annotatedString.toIndents()
+            // ليست قائمة: ورّث المحاذاة والاتجاه من الفقرة السابقة لتبقى مستقرّة
+            if (marker == null) {
+                val paras = paragraphSpans(new.text)
+                val prevIdx = paras.indexOfFirst { (ps, pe) -> prevStart in ps until (pe + 1) && ps == prevStart }
+                val newIdx = prevIdx + 1
+                if (prevIdx < 0 || newIdx >= aligns.size || newIdx >= dirs.size) return new
+                val pAlign = aligns[prevIdx]
+                val pDir = dirs[prevIdx]
+                if (pAlign == TextAlign.Start && pDir == TextDirection.Content) return new
+                aligns[newIdx] = pAlign
+                dirs[newIdx] = pDir
+                return new.copy(
+                    annotatedString = buildAnnotated(new.text, attrs, aligns, dirs, ls, ind),
+                    selection = new.selection,
+                )
+            }
             // عنصر فارغ (علامة فقط) ثم Enter => إنهاء القائمة بحذف العلامة
             val prevMarkerLen = markerLength(new.text, prevStart)
             if (prevLine.length == prevMarkerLen) {

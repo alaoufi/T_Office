@@ -3,6 +3,8 @@ package com.toffice.app.feature.editor.model
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDirection
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -171,5 +173,42 @@ class RichTextOpsTest {
         val v = tfv("A. بند")
         val r = RichTextOps.applyList(v, null)
         assertEquals("بند", r.annotatedString.text)
+    }
+
+    // ---- استقرار الاتجاه/المحاذاة ----
+
+    @Test
+    fun emptyTrailingParagraph_keepsDirection() {
+        val ann = buildAnnotated(
+            "سطر\n",
+            List(4) { CharAttrs() },
+            listOf(TextAlign.Start, TextAlign.Start),
+            listOf(TextDirection.Rtl, TextDirection.Rtl),
+        )
+        assertEquals(TextDirection.Rtl, ann.toDirections()[1])
+    }
+
+    @Test
+    fun directionPreservedAcrossBold() {
+        val rtl = RichTextOps.setDirection(tfv("سطر"), TextDirection.Rtl)
+        val bolded = RichTextOps.toggleBold(rtl.copy(selection = TextRange(0, 3)))
+        assertEquals(TextDirection.Rtl, bolded.annotatedString.toDirections()[0])
+    }
+
+    @Test
+    fun newParagraphInheritsDirection() {
+        // الفقرة الأولى RTL، ثم Enter ⇒ الفقرة الجديدة ترث RTL
+        val rtl = RichTextOps.setDirection(tfv("سطر"), TextDirection.Rtl)
+        val old = rtl.copy(selection = TextRange(3))
+        // محاكاة قيمة ما بعد Enter مع الحفاظ على نمط الفقرة الأولى
+        val newAnn = buildAnnotated(
+            "سطر\n",
+            List(4) { CharAttrs() },
+            listOf(TextAlign.Start, TextAlign.Start),
+            listOf(TextDirection.Rtl, TextDirection.Content),
+        )
+        val new = TextFieldValue(newAnn, selection = TextRange(4))
+        val r = RichTextOps.maybeContinueList(old, new)
+        assertEquals(TextDirection.Rtl, r.annotatedString.toDirections()[1])
     }
 }
