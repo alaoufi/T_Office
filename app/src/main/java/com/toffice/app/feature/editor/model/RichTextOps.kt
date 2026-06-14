@@ -9,7 +9,36 @@ import androidx.compose.ui.text.style.TextDirection
 object RichTextOps {
 
     const val BULLET = "• "
-    private val NUM_RE = Regex("^(\\d+)\\. ")
+    private val NUM_RE = Regex("^([0-9٠-٩]+)\\. ")
+    private const val ARABIC_DIGITS = "٠١٢٣٤٥٦٧٨٩"
+
+    /** يصوغ رقماً بأرقام عربية أو لاتينية حسب السياق. */
+    private fun formatNumber(n: Int, arabic: Boolean): String =
+        if (arabic) n.toString().map { ARABIC_DIGITS[it - '0'] }.joinToString("") else n.toString()
+
+    /** يحوّل سلسلة أرقام (عربية/لاتينية) إلى عدد. */
+    private fun parseNumber(s: String): Int {
+        val sb = StringBuilder()
+        for (c in s) {
+            val idx = ARABIC_DIGITS.indexOf(c)
+            sb.append(if (idx >= 0) ('0' + idx) else c)
+        }
+        return sb.toString().toIntOrNull() ?: 0
+    }
+
+    private fun usesArabicDigits(s: String): Boolean = s.any { ARABIC_DIGITS.indexOf(it) >= 0 }
+
+    /** هل سياق النص عربي (RTL) من أول حرف قوي الاتجاه؟ */
+    private fun isArabicContext(text: String): Boolean {
+        for (c in text) {
+            when (Character.getDirectionality(c)) {
+                Character.DIRECTIONALITY_RIGHT_TO_LEFT,
+                Character.DIRECTIONALITY_RIGHT_TO_LEFT_ARABIC -> return true
+                Character.DIRECTIONALITY_LEFT_TO_RIGHT -> return false
+            }
+        }
+        return true // الافتراضي عربي
+    }
 
     private fun bounds(v: TextFieldValue): Pair<Int, Int> {
         val s = minOf(v.selection.start, v.selection.end)
@@ -168,7 +197,12 @@ object RichTextOps {
                 offset -= curLen
             }
             if (!allMarked) {
-                val marker = if (numbered) "${n}. " else BULLET
+                val marker = if (numbered) {
+                    var lineEnd = ps
+                    while (lineEnd < sb.length && sb[lineEnd] != '\n') lineEnd++
+                    val arabic = isArabicContext(sb.substring(ps, lineEnd))
+                    "${formatNumber(n, arabic)}. "
+                } else BULLET
                 sb.insert(ps, marker)
                 repeat(marker.length) { attrs.add(ps, CharAttrs()) }
                 if (caret >= ps) caret += marker.length
@@ -198,7 +232,10 @@ object RichTextOps {
             val numMatch = NUM_RE.find(prevLine)
             val marker = when {
                 prevLine.startsWith(BULLET) -> BULLET
-                numMatch != null -> "${numMatch.groupValues[1].toInt() + 1}. "
+                numMatch != null -> {
+                    val digits = numMatch.groupValues[1]
+                    "${formatNumber(parseNumber(digits) + 1, usesArabicDigits(digits))}. "
+                }
                 else -> return new
             }
             val attrs = new.annotatedString.toCharAttrs()
