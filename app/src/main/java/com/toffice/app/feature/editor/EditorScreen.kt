@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -36,6 +37,7 @@ import androidx.compose.material.icons.automirrored.filled.FormatIndentIncrease
 import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
 import androidx.compose.material.icons.automirrored.filled.FormatTextdirectionLToR
 import androidx.compose.material.icons.automirrored.filled.FormatTextdirectionRToL
+import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.ArrowDropDown
@@ -56,13 +58,16 @@ import androidx.compose.material.icons.filled.FormatLineSpacing
 import androidx.compose.material.icons.filled.FormatListNumbered
 import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.FormatUnderlined
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Numbers
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.material.icons.filled.StrikethroughS
+import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
@@ -102,7 +107,6 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.TextStyle
@@ -200,9 +204,8 @@ fun EditorScreen(
     var showMenu by remember { mutableStateOf(false) }
     var showPageSetup by remember { mutableStateOf(false) }
     var showSaveAs by remember { mutableStateOf(false) }
-
-    // تخطيط متجاوب: التابلت شريط أدوات علوي، الجوال سفلي
-    val isCompact = LocalConfiguration.current.screenWidthDp < 600
+    var ribbonTab by remember { mutableStateOf(RibbonTab.Home) }
+    var showRuler by remember { mutableStateOf(true) }
 
     val openLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
@@ -284,56 +287,9 @@ fun EditorScreen(
                     IconButton(onClick = { redo() }, enabled = redoStack.isNotEmpty()) {
                         Icon(Icons.AutoMirrored.Filled.Redo, contentDescription = "إعادة")
                     }
-                    // قائمة «ملف» وأدواتها
-                    Box {
-                        Row(
-                            Modifier.clickable { showMenu = true }.padding(horizontal = 10.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(Icons.Default.Folder, contentDescription = null)
-                            Text(" ملف", style = MaterialTheme.typography.labelLarge)
-                            Icon(Icons.Default.ArrowDropDown, null)
-                        }
-                        DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                            DropdownMenuItem(
-                                text = { Text("فتح ملف…") },
-                                leadingIcon = { Icon(Icons.Default.FolderOpen, null) },
-                                onClick = { showMenu = false; openLauncher.launch(arrayOf(MIME_DOCX, "application/msword", "*/*")) },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("حفظ") },
-                                leadingIcon = { Icon(Icons.Default.Save, null) },
-                                onClick = { showMenu = false; persist() },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("حفظ باسم…") },
-                                leadingIcon = { Icon(Icons.Default.SaveAs, null) },
-                                onClick = { showMenu = false; showSaveAs = true },
-                            )
-                            HorizontalDivider()
-                            DropdownMenuItem(
-                                text = { Text("إعداد الصفحة") },
-                                leadingIcon = { Icon(Icons.Default.AspectRatio, null) },
-                                onClick = { showMenu = false; showPageSetup = true },
-                            )
-                            DropdownMenuItem(
-                                text = { Text(if (page.showPageNumber) "إخفاء ترقيم الصفحات" else "إظهار ترقيم الصفحات") },
-                                leadingIcon = { Icon(Icons.Default.Numbers, null) },
-                                onClick = { page = page.copy(showPageNumber = !page.showPageNumber); showMenu = false },
-                            )
-                            HorizontalDivider()
-                            DropdownMenuItem(
-                                text = { Text("تصدير PDF") },
-                                leadingIcon = { Icon(Icons.Default.PictureAsPdf, null) },
-                                onClick = { showMenu = false; pdfLauncher.launch("${title.ifBlank { "مستند" }}.pdf") },
-                            )
-                        }
-                    }
+                    IconButton(onClick = { persist() }) { Icon(Icons.Default.Save, contentDescription = "حفظ") }
                 },
             )
-        },
-        bottomBar = {
-            if (isCompact) FormatToolbar(value = activeValue, onChange = activeOnChange)
         },
     ) { padding ->
         Column(
@@ -341,7 +297,25 @@ fun EditorScreen(
                 .fillMaxSize()
                 .padding(top = padding.calculateTopPadding(), bottom = padding.calculateBottomPadding()),
         ) {
-            if (!isCompact) FormatToolbar(value = activeValue, onChange = activeOnChange)
+            // شريط التبويبات (Ribbon) — يتبع اتجاه الصفحة
+            CompositionLocalProviderDir(page.rtlPage) {
+                EditorRibbon(
+                    tab = ribbonTab,
+                    onTab = { ribbonTab = it },
+                    value = activeValue,
+                    onChange = activeOnChange,
+                    page = page,
+                    wordCount = wordCount(value.text),
+                    showRuler = showRuler,
+                    onToggleRuler = { showRuler = !showRuler },
+                    onTogglePageNumber = { page = page.copy(showPageNumber = !page.showPageNumber) },
+                    onOpen = { openLauncher.launch(arrayOf(MIME_DOCX, "application/msword", "*/*")) },
+                    onSave = { persist() },
+                    onSaveAs = { showSaveAs = true },
+                    onExportPdf = { pdfLauncher.launch("${title.ifBlank { "مستند" }}.pdf") },
+                    onPageSetup = { showPageSetup = true },
+                )
+            }
 
             if (showPageSetup) {
                 PageSetupDialog(
@@ -373,8 +347,8 @@ fun EditorScreen(
                         .background(MaterialTheme.colorScheme.surfaceVariant)
                         .padding(8.dp),
                 ) {
-                    val rulerThick = 22.dp
-                    val gap = 2.dp
+                    val rulerThick = if (showRuler) 22.dp else 0.dp
+                    val gap = if (showRuler) 2.dp else 0.dp
                     val density = LocalDensity.current.density
                     val sheetWidthDp = maxWidth - rulerThick - gap
                     val scale = sheetWidthDp.value / page.pageWidthPt
@@ -390,28 +364,32 @@ fun EditorScreen(
                         else -> page.rtlPage
                     }
                     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-                        Row {
-                            Spacer(Modifier.width(rulerThick + gap))
-                            HorizontalRuler(
-                                pageWidthPt = page.pageWidthPt,
-                                marginLeftPt = page.marginLeftPt,
-                                marginRightPt = page.marginRightPt,
-                                scale = scale,
-                                rtl = rulerRtl,
-                                onChange = { l, r -> page = page.copy(marginLeftPt = l, marginRightPt = r) },
-                            )
+                        if (showRuler) {
+                            Row {
+                                Spacer(Modifier.width(rulerThick + gap))
+                                HorizontalRuler(
+                                    pageWidthPt = page.pageWidthPt,
+                                    marginLeftPt = page.marginLeftPt,
+                                    marginRightPt = page.marginRightPt,
+                                    scale = scale,
+                                    rtl = rulerRtl,
+                                    onChange = { l, r -> page = page.copy(marginLeftPt = l, marginRightPt = r) },
+                                )
+                            }
+                            Spacer(Modifier.height(2.dp))
                         }
-                        Spacer(Modifier.height(2.dp))
                         Row {
-                            VerticalRuler(
-                                pageHeightPt = page.pageHeightPt,
-                                heightDp = sheetHeightDp,
-                                marginTopPt = page.marginTopPt,
-                                marginBottomPt = page.marginBottomPt,
-                                scale = scale,
-                                onChange = { t, b -> page = page.copy(marginTopPt = t, marginBottomPt = b) },
-                            )
-                            Spacer(Modifier.width(gap))
+                            if (showRuler) {
+                                VerticalRuler(
+                                    pageHeightPt = page.pageHeightPt,
+                                    heightDp = sheetHeightDp,
+                                    marginTopPt = page.marginTopPt,
+                                    marginBottomPt = page.marginBottomPt,
+                                    scale = scale,
+                                    onChange = { t, b -> page = page.copy(marginTopPt = t, marginBottomPt = b) },
+                                )
+                                Spacer(Modifier.width(gap))
+                            }
                             PageSheet(
                                 widthDp = sheetWidthDp,
                                 pageHeightDp = pageHeightDp,
@@ -650,6 +628,123 @@ private fun SaveAsDialog(onDismiss: () -> Unit, onPick: (SaveFormat) -> Unit) {
         confirmButton = { TextButton(onClick = { onPick(fmt) }) { Text("حفظ") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } },
     )
+}
+
+/** تبويبات الشريط (Ribbon) بنمط WPS. */
+enum class RibbonTab { File, Home, Insert, View, Review }
+
+/** عدد الكلمات في النص. */
+fun wordCount(text: String): Int =
+    text.split(Regex("\\s+")).count { it.isNotBlank() }
+
+@Composable
+private fun EditorRibbon(
+    tab: RibbonTab,
+    onTab: (RibbonTab) -> Unit,
+    value: TextFieldValue,
+    onChange: (TextFieldValue) -> Unit,
+    page: PageSettings,
+    wordCount: Int,
+    showRuler: Boolean,
+    onToggleRuler: () -> Unit,
+    onTogglePageNumber: () -> Unit,
+    onOpen: () -> Unit,
+    onSave: () -> Unit,
+    onSaveAs: () -> Unit,
+    onExportPdf: () -> Unit,
+    onPageSetup: () -> Unit,
+) {
+    Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)) {
+        // صف التبويبات
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            RibbonTabButton("ملف", tab == RibbonTab.File) { onTab(RibbonTab.File) }
+            RibbonTabButton("الصفحة الرئيسية", tab == RibbonTab.Home) { onTab(RibbonTab.Home) }
+            RibbonTabButton("إدراج", tab == RibbonTab.Insert) { onTab(RibbonTab.Insert) }
+            RibbonTabButton("عرض", tab == RibbonTab.View) { onTab(RibbonTab.View) }
+            RibbonTabButton("مراجعة", tab == RibbonTab.Review) { onTab(RibbonTab.Review) }
+        }
+        HorizontalDivider()
+        // أدوات التبويب المختار
+        when (tab) {
+            RibbonTab.Home -> FormatToolbar(value, onChange)
+            RibbonTab.File -> Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 4.dp),
+            ) {
+                RibbonButton(Icons.Default.FolderOpen, "فتح", onClick = onOpen)
+                RibbonButton(Icons.Default.Save, "حفظ", onClick = onSave)
+                RibbonButton(Icons.Default.SaveAs, "حفظ باسم", onClick = onSaveAs)
+                RibbonButton(Icons.Default.PictureAsPdf, "PDF", onClick = onExportPdf)
+                ToolDivider()
+                RibbonButton(Icons.Default.AspectRatio, "إعداد الصفحة", onClick = onPageSetup)
+            }
+            RibbonTab.Insert -> Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 4.dp),
+            ) {
+                RibbonButton(Icons.Default.Numbers, "رقم الصفحة", active = page.showPageNumber, onClick = onTogglePageNumber)
+                RibbonButton(Icons.Default.TableChart, "جدول (قريباً)", enabled = false) {}
+                RibbonButton(Icons.Default.Image, "صورة (قريباً)", enabled = false) {}
+            }
+            RibbonTab.View -> Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 4.dp),
+            ) {
+                RibbonButton(Icons.Default.Straighten, if (showRuler) "إخفاء المسطرة" else "إظهار المسطرة", active = showRuler, onClick = onToggleRuler)
+            }
+            RibbonTab.Review -> Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.AutoMirrored.Filled.Notes, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("  عدد الكلمات: $wordCount", style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+        HorizontalDivider()
+    }
+}
+
+@Composable
+private fun RibbonTabButton(label: String, selected: Boolean, onClick: () -> Unit) {
+    val color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+    Column(
+        Modifier.clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(label, color = color, style = MaterialTheme.typography.titleSmall)
+        Box(
+            Modifier
+                .padding(top = 4.dp)
+                .height(2.dp)
+                .width(if (selected) 24.dp else 0.dp)
+                .background(MaterialTheme.colorScheme.primary),
+        )
+    }
+}
+
+@Composable
+private fun RibbonButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    active: Boolean = false,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    val tint = when {
+        !enabled -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+        active -> MaterialTheme.colorScheme.primary
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Column(
+        Modifier
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 4.dp)
+            .widthIn(min = 56.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Icon(icon, contentDescription = label, tint = tint)
+        Text(label, style = MaterialTheme.typography.labelSmall, color = tint, maxLines = 1)
+    }
 }
 
 @Composable
