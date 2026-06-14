@@ -8,7 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.toffice.app.data.document.DocumentDao
 import com.toffice.app.data.document.DocumentEntity
 import com.toffice.app.feature.editor.io.DocxReader
-import com.toffice.app.feature.editor.model.annotatedToJson
+import com.toffice.app.feature.editor.model.DocSerializer
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -51,7 +51,7 @@ class DocumentsViewModel @Inject constructor(
             val json = withContext(Dispatchers.IO) {
                 try {
                     context.contentResolver.openInputStream(uri)?.use {
-                        annotatedToJson(DocxReader.read(it))
+                        DocSerializer.serialize(DocxReader.read(it))
                     }
                 } catch (e: Exception) {
                     null

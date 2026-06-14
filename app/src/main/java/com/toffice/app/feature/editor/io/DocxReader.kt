@@ -5,53 +5,65 @@ import androidx.compose.ui.text.style.TextAlign
 import com.toffice.app.feature.editor.model.CharAttrs
 import com.toffice.app.feature.editor.model.COLOR_DEFAULT
 import com.toffice.app.feature.editor.model.DEFAULT_FONT_SP
+import com.toffice.app.feature.editor.model.DocBundle
+import com.toffice.app.feature.editor.model.PageSettings
 import com.toffice.app.feature.editor.model.buildAnnotated
+import com.toffice.app.feature.editor.model.twipsToPt
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserFactory
 import java.io.InputStream
 import java.io.StringReader
 import java.util.zip.ZipInputStream
 
-/** يقرأ مستند DOCX (OOXML) ويحوّله إلى نص منسّق. يدعم: غامق/مائل/تسطير/حجم/لون/محاذاة. */
+/** يقرأ مستند DOCX (OOXML): المتن + التنسيق + الهوامش + الترويسة + التذييل. */
 object DocxReader {
 
-    fun read(input: InputStream): AnnotatedString {
-        val xml = extractDocumentXml(input) ?: return AnnotatedString("")
-        return parse(xml)
+    fun read(input: InputStream): DocBundle {
+        val parts = readAllParts(input)
+        val docXml = parts["word/document.xml"] ?: return DocBundle(AnnotatedString(""))
+
+        val parsed = parseDocument(docXml)
+
+        val headerXml = parts.entries.firstOrNull { it.key.matches(Regex("word/header\\d*\\.xml")) }?.value
+        val footerXml = parts.entries.firstOrNull { it.key.matches(Regex("word/footer\\d*\\.xml")) }?.value
+
+        return DocBundle(
+            body = parsed.first,
+            page = parsed.second,
+            header = headerXml?.let { plainText(it) } ?: "",
+            footer = footerXml?.let { plainText(it) } ?: "",
+        )
     }
 
-    private fun extractDocumentXml(input: InputStream): String? {
+    private fun readAllParts(input: InputStream): Map<String, String> {
+        val map = mutableMapOf<String, String>()
         ZipInputStream(input).use { zip ->
             var entry = zip.nextEntry
             while (entry != null) {
-                if (entry.name == "word/document.xml") {
-                    return zip.readBytes().toString(Charsets.UTF_8)
+                val name = entry.name
+                if (name.endsWith(".xml")) {
+                    map[name] = zip.readBytes().toString(Charsets.UTF_8)
                 }
                 entry = zip.nextEntry
             }
         }
-        return null
+        return map
     }
 
-    private fun parse(xml: String): AnnotatedString {
-        val factory = XmlPullParserFactory.newInstance().apply { isNamespaceAware = false }
-        val parser = factory.newPullParser()
-        parser.setInput(StringReader(xml))
+    private fun parseDocument(xml: String): Pair<AnnotatedString, PageSettings> {
+        val parser = newParser(xml)
 
         val text = StringBuilder()
         val attrs = mutableListOf<CharAttrs>()
         val aligns = mutableListOf<TextAlign>()
+        var page = PageSettings()
 
         var firstParagraph = true
         var curAlign = TextAlign.Right
         var inT = false
 
-        // خصائص المقطع (run) الحالي
-        var rb = false
-        var ri = false
-        var ru = false
-        var rsz = DEFAULT_FONT_SP
-        var rc = COLOR_DEFAULT
+        var rb = false; var ri = false; var ru = false
+        var rsz = DEFAULT_FONT_SP; var rc = COLOR_DEFAULT
 
         fun appendText(s: String) {
             for (c in s) {
@@ -65,10 +77,7 @@ object DocxReader {
             when (event) {
                 XmlPullParser.START_TAG -> when (local(parser.name)) {
                     "p" -> {
-                        if (!firstParagraph) {
-                            text.append('\n')
-                            attrs.add(CharAttrs())
-                        }
+                        if (!firstParagraph) { text.append('\n'); attrs.add(CharAttrs()) }
                         firstParagraph = false
                         curAlign = TextAlign.Right
                     }
@@ -81,6 +90,16 @@ object DocxReader {
                     "color" -> {
                         val v = attr(parser, "val")
                         if (v != null && v != "auto") parseHex(v)?.let { rc = it }
+                    }
+                    "pgSz" -> {
+                        attr(parser, "w")?.toIntOrNull()?.let { page = page.copy(pageWidthPt = it.twipsToPt()) }
+                        attr(parser, "h")?.toIntOrNull()?.let { page = page.copy(pageHeightPt = it.twipsToPt()) }
+                    }
+                    "pgMar" -> {
+                        attr(parser, "top")?.toIntOrNull()?.let { page = page.copy(marginTopPt = it.twipsToPt()) }
+                        attr(parser, "right")?.toIntOrNull()?.let { page = page.copy(marginRightPt = it.twipsToPt()) }
+                        attr(parser, "bottom")?.toIntOrNull()?.let { page = page.copy(marginBottomPt = it.twipsToPt()) }
+                        attr(parser, "left")?.toIntOrNull()?.let { page = page.copy(marginLeftPt = it.twipsToPt()) }
                     }
                     "t" -> inT = true
                     "tab" -> appendText("    ")
@@ -95,7 +114,33 @@ object DocxReader {
             event = parser.next()
         }
 
-        return buildAnnotated(text.toString(), attrs, aligns)
+        return buildAnnotated(text.toString(), attrs, aligns) to page
+    }
+
+    /** استخراج نص بسيط من ترويسة/تذييل (الفقرات مفصولة بسطر جديد). */
+    private fun plainText(xml: String): String {
+        val parser = newParser(xml)
+        val sb = StringBuilder()
+        var inT = false
+        var firstP = true
+        var event = parser.eventType
+        while (event != XmlPullParser.END_DOCUMENT) {
+            when (event) {
+                XmlPullParser.START_TAG -> when (local(parser.name)) {
+                    "p" -> { if (!firstP) sb.append('\n'); firstP = false }
+                    "t" -> inT = true
+                }
+                XmlPullParser.TEXT -> if (inT) sb.append(parser.text ?: "")
+                XmlPullParser.END_TAG -> if (local(parser.name) == "t") inT = false
+            }
+            event = parser.next()
+        }
+        return sb.toString().trim()
+    }
+
+    private fun newParser(xml: String): XmlPullParser {
+        val factory = XmlPullParserFactory.newInstance().apply { isNamespaceAware = false }
+        return factory.newPullParser().apply { setInput(StringReader(xml)) }
     }
 
     private fun local(name: String?): String = name?.substringAfter(':') ?: ""

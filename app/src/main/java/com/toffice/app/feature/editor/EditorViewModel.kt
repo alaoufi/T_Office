@@ -8,6 +8,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.toffice.app.data.document.DocumentDao
 import com.toffice.app.feature.editor.io.DocxWriter
+import com.toffice.app.feature.editor.model.PageSettings
 import com.toffice.app.feature.editor.model.toParagraphsOut
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -67,11 +68,17 @@ class EditorViewModel @Inject constructor(
         }
     }
 
-    fun exportDocx(uri: Uri, annotated: AnnotatedString) {
+    fun exportDocx(
+        uri: Uri,
+        annotated: AnnotatedString,
+        page: PageSettings,
+        header: String,
+        footer: String,
+    ) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 context.contentResolver.openOutputStream(uri)?.use {
-                    DocxWriter.write(it, annotated.toParagraphsOut())
+                    DocxWriter.write(it, annotated.toParagraphsOut(), page, header, footer)
                 }
                 _events.emit("تم تصدير ملف Word بنجاح")
             } catch (e: Exception) {
