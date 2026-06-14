@@ -1,5 +1,6 @@
 package com.toffice.app.feature.editor.io
 
+import com.toffice.app.feature.editor.model.INDENT_STEP_PT
 import com.toffice.app.feature.editor.model.PageSettings
 import com.toffice.app.feature.editor.model.ParaOut
 import com.toffice.app.feature.editor.model.RunOut
@@ -115,7 +116,18 @@ object DocxWriter {
         val sb = StringBuilder()
         sb.append("<w:p><w:pPr>")
         if (rtl) sb.append("<w:bidi/>")
-        sb.append("<w:jc w:val=\"").append(jc).append("\"/></w:pPr>")
+        sb.append("<w:jc w:val=\"").append(jc).append("\"/>")
+        // المسافة البادئة (من جهة بداية الفقرة، تحترم الاتجاه)
+        if (p.indentLevel > 0) {
+            val twips = p.indentLevel * INDENT_STEP_PT * 20
+            sb.append("<w:ind w:start=\"").append(twips).append("\"/>")
+        }
+        // تباعد الأسطر (٢٤٠ = مفرد)
+        if (p.lineSpacing != 1f) {
+            val line = (240 * p.lineSpacing).toInt()
+            sb.append("<w:spacing w:line=\"").append(line).append("\" w:lineRule=\"auto\"/>")
+        }
+        sb.append("</w:pPr>")
         for (r in p.runs) sb.append(run(r, rtl))
         sb.append("</w:p>")
         return sb.toString()

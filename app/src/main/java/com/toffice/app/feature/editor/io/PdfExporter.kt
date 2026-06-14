@@ -13,6 +13,7 @@ import android.text.style.AbsoluteSizeSpan
 import android.text.style.AlignmentSpan
 import android.text.style.BackgroundColorSpan
 import android.text.style.ForegroundColorSpan
+import android.text.style.LeadingMarginSpan
 import android.text.style.StrikethroughSpan
 import android.text.style.StyleSpan
 import android.text.style.UnderlineSpan
@@ -21,11 +22,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDirection
 import com.toffice.app.feature.editor.model.CharAttrs
 import com.toffice.app.feature.editor.model.DEFAULT_FONT_SP
+import com.toffice.app.feature.editor.model.INDENT_STEP_PT
 import com.toffice.app.feature.editor.model.PageSettings
 import com.toffice.app.feature.editor.model.paragraphSpans
 import com.toffice.app.feature.editor.model.toAligns
 import com.toffice.app.feature.editor.model.toCharAttrs
 import com.toffice.app.feature.editor.model.toDirections
+import com.toffice.app.feature.editor.model.toIndents
+import com.toffice.app.feature.editor.model.toLineSpacings
 import java.io.OutputStream
 
 /** يصدّر المستند إلى PDF مع المحافظة على التنسيق والهوامش والترويسة/التذييل وترقيم الصفحات. */
@@ -54,10 +58,14 @@ object PdfExporter {
             textSize = DEFAULT_FONT_SP.toFloat()
         }
         val spannable = toSpannable(body)
+        // تباعد الأسطر: نطبّق المضاعف الأكثر شيوعاً على المتن (StaticLayout عام لا يدعم تباعداً لكل فقرة قبل API 29)
+        val spacingMult = body.toLineSpacings().groupingBy { it }.eachCount()
+            .maxByOrNull { it.value }?.key ?: 1f
         val layout = StaticLayout.Builder
             .obtain(spannable, 0, spannable.length, paint, contentW)
             .setAlignment(Layout.Alignment.ALIGN_NORMAL)
             .setTextDirection(TextDirectionHeuristics.FIRSTSTRONG_RTL)
+            .setLineSpacing(0f, spacingMult)
             .setIncludePad(false)
             .build()
 
@@ -140,6 +148,7 @@ object PdfExporter {
 
         val aligns = annotated.toAligns()
         val directions = annotated.toDirections()
+        val indents = annotated.toIndents()
         val paras = paragraphSpans(text)
         paras.forEachIndexed { idx, (s, e) ->
             if (e > s) {
@@ -150,6 +159,10 @@ object PdfExporter {
                 }
                 val al = androidAlign(aligns.getOrElse(idx) { TextAlign.Start }, rtl)
                 sb.setSpan(AlignmentSpan.Standard(al), s, e, Spanned.SPAN_PARAGRAPH)
+                val level = indents.getOrElse(idx) { 0 }
+                if (level > 0) {
+                    sb.setSpan(LeadingMarginSpan.Standard(level * INDENT_STEP_PT), s, e, Spanned.SPAN_PARAGRAPH)
+                }
             }
         }
         return sb

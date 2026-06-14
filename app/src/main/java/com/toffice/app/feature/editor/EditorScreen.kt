@@ -29,6 +29,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.FormatAlignLeft
 import androidx.compose.material.icons.automirrored.filled.FormatAlignRight
+import androidx.compose.material.icons.automirrored.filled.FormatIndentDecrease
+import androidx.compose.material.icons.automirrored.filled.FormatIndentIncrease
 import androidx.compose.material.icons.automirrored.filled.FormatTextdirectionLToR
 import androidx.compose.material.icons.automirrored.filled.FormatTextdirectionRToL
 import androidx.compose.material.icons.automirrored.filled.Redo
@@ -43,6 +45,7 @@ import androidx.compose.material.icons.filled.FormatColorFill
 import androidx.compose.material.icons.filled.FormatColorReset
 import androidx.compose.material.icons.filled.FormatColorText
 import androidx.compose.material.icons.filled.FormatItalic
+import androidx.compose.material.icons.filled.FormatLineSpacing
 import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.FormatUnderlined
 import androidx.compose.material.icons.filled.Language
@@ -515,16 +518,25 @@ private fun PageSetupDialog(
 
 private val FONT_SIZES = listOf(10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 72)
 
+private val LINE_SPACINGS = listOf(
+    1.0f to "مفرد (١٫٠)",
+    1.15f to "١٫١٥",
+    1.5f to "١٫٥",
+    2.0f to "مزدوج (٢٫٠)",
+)
+
 @Composable
 private fun FormatToolbar(value: TextFieldValue, onChange: (TextFieldValue) -> Unit) {
     val cur = RichTextOps.currentAttrs(value)
     val curAlign = RichTextOps.currentAlign(value)
     val curDir = RichTextOps.currentDirection(value)
+    val curSpacing = RichTextOps.currentLineSpacing(value)
 
     var sizeMenu by remember { mutableStateOf(false) }
     var colorMenu by remember { mutableStateOf(false) }
     var alignMenu by remember { mutableStateOf(false) }
     var dirMenu by remember { mutableStateOf(false) }
+    var spacingMenu by remember { mutableStateOf(false) }
     var moreMenu by remember { mutableStateOf(false) }
 
     Row(
@@ -596,6 +608,29 @@ private fun FormatToolbar(value: TextFieldValue, onChange: (TextFieldValue) -> U
                 MenuChoice("عربي ← (RTL)", Icons.AutoMirrored.Filled.FormatTextdirectionRToL, curDir == TextDirection.Rtl) { onChange(RichTextOps.setDirection(value, TextDirection.Rtl)); dirMenu = false }
                 MenuChoice("لاتيني → (LTR)", Icons.AutoMirrored.Filled.FormatTextdirectionLToR, curDir == TextDirection.Ltr) { onChange(RichTextOps.setDirection(value, TextDirection.Ltr)); dirMenu = false }
             }
+        }
+        ToolDivider()
+
+        // تباعد الأسطر (قائمة)
+        Box {
+            IconButton(onClick = { spacingMenu = true }) {
+                Icon(Icons.Default.FormatLineSpacing, "تباعد الأسطر", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            DropdownMenu(expanded = spacingMenu, onDismissRequest = { spacingMenu = false }) {
+                LINE_SPACINGS.forEach { (mult, label) ->
+                    MenuChoice(label, Icons.Default.FormatLineSpacing, kotlin.math.abs(curSpacing - mult) < 0.01f) {
+                        onChange(RichTextOps.setLineSpacing(value, mult)); spacingMenu = false
+                    }
+                }
+            }
+        }
+
+        // المسافة البادئة (زيادة/إنقاص)
+        ToolToggle(Icons.AutoMirrored.Filled.FormatIndentIncrease, "زيادة المسافة البادئة", false) {
+            onChange(RichTextOps.changeIndent(value, +1))
+        }
+        ToolToggle(Icons.AutoMirrored.Filled.FormatIndentDecrease, "إنقاص المسافة البادئة", false) {
+            onChange(RichTextOps.changeIndent(value, -1))
         }
         ToolDivider()
 

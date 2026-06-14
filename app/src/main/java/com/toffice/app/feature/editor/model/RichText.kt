@@ -11,16 +11,22 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.text.style.TextIndent
 import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import org.json.JSONArray
 import org.json.JSONObject
+import kotlin.math.roundToInt
 
 /** الحجم الافتراضي للخط بالنقاط (sp). */
 const val DEFAULT_FONT_SP = 16
 
 /** لون افتراضي (0 = استخدم لون الثيم). */
 const val COLOR_DEFAULT = 0
+
+/** مقدار المسافة البادئة لكل مستوى (نقطة ≈ ٠٫٥ بوصة كما في وورد). */
+const val INDENT_STEP_PT = 36
 
 /** خصائص تنسيق حرف واحد. */
 data class CharAttrs(
@@ -138,12 +144,33 @@ fun AnnotatedString.toDirections(): MutableList<TextDirection> {
     }.toMutableList()
 }
 
-/** يبني نصاً منسّقاً من النص + الخصائص + المحاذاة + اتجاه الفقرات. */
+/** يستخرج تباعد الأسطر لكل فقرة (مضاعف: ١٫٠ مفرد، ١٫٥ … الافتراضي ١٫٠). */
+fun AnnotatedString.toLineSpacings(): MutableList<Float> {
+    val paras = paragraphSpans(text)
+    return paras.map { (s, _) ->
+        val lh = paragraphStyles.firstOrNull { it.start == s }?.item?.lineHeight
+        if (lh != null && lh != TextUnit.Unspecified) lh.value else 1f
+    }.toMutableList()
+}
+
+/** يستخرج مستوى المسافة البادئة لكل فقرة (٠ = بلا، الافتراضي ٠). */
+fun AnnotatedString.toIndents(): MutableList<Int> {
+    val paras = paragraphSpans(text)
+    return paras.map { (s, _) ->
+        val ti = paragraphStyles.firstOrNull { it.start == s }?.item?.textIndent
+        if (ti != null && ti != TextIndent.None && ti.firstLine != TextUnit.Unspecified)
+            (ti.firstLine.value / INDENT_STEP_PT).roundToInt() else 0
+    }.toMutableList()
+}
+
+/** يبني نصاً منسّقاً من النص + الخصائص + المحاذاة + اتجاه الفقرات + التباعد + المسافة البادئة. */
 fun buildAnnotated(
     text: String,
     attrs: List<CharAttrs>,
     aligns: List<TextAlign>,
     directions: List<TextDirection> = emptyList(),
+    lineSpacings: List<Float> = emptyList(),
+    indents: List<Int> = emptyList(),
 ): AnnotatedString = buildAnnotatedString {
     append(text)
     val paras = paragraphSpans(text)
@@ -151,7 +178,20 @@ fun buildAnnotated(
         if (e > s) {
             val al = aligns.getOrElse(idx) { TextAlign.Start }
             val dir = directions.getOrElse(idx) { TextDirection.Content }
-            addStyle(ParagraphStyle(textAlign = al, textDirection = dir), s, e)
+            val ls = lineSpacings.getOrElse(idx) { 1f }
+            val ind = indents.getOrElse(idx) { 0 }
+            addStyle(
+                ParagraphStyle(
+                    textAlign = al,
+                    textDirection = dir,
+                    lineHeight = if (ls != 1f) ls.em else TextUnit.Unspecified,
+                    textIndent = if (ind > 0) {
+                        val v = (ind * INDENT_STEP_PT).sp
+                        TextIndent(firstLine = v, restLine = v)
+                    } else TextIndent.None,
+                ),
+                s, e,
+            )
         }
     }
     var i = 0
@@ -189,11 +229,17 @@ fun annotatedToJson(a: AnnotatedString): String {
     aligns.forEach { alignsArr.put(it.toCode()) }
     val dirsArr = JSONArray()
     a.toDirections().forEach { dirsArr.put(it.toDirCode()) }
+    val lsArr = JSONArray()
+    a.toLineSpacings().forEach { lsArr.put(it.toDouble()) }
+    val indArr = JSONArray()
+    a.toIndents().forEach { indArr.put(it) }
     return JSONObject()
         .put("text", a.text)
         .put("runs", runs)
         .put("aligns", alignsArr)
         .put("dirs", dirsArr)
+        .put("ls", lsArr)
+        .put("ind", indArr)
         .toString()
 }
 
@@ -229,7 +275,17 @@ fun jsonToAnnotated(json: String): AnnotatedString {
     for (k in 0 until minOf(dirsArr.length(), directions.size)) {
         directions[k] = dirsArr.getInt(k).toTextDirection()
     }
-    return buildAnnotated(text, attrs, aligns, directions)
+    val lsArr = obj.optJSONArray("ls") ?: JSONArray()
+    val lineSpacings = MutableList(paras.size) { 1f }
+    for (k in 0 until minOf(lsArr.length(), lineSpacings.size)) {
+        lineSpacings[k] = lsArr.getDouble(k).toFloat()
+    }
+    val indArr = obj.optJSONArray("ind") ?: JSONArray()
+    val indents = MutableList(paras.size) { 0 }
+    for (k in 0 until minOf(indArr.length(), indents.size)) {
+        indents[k] = indArr.getInt(k)
+    }
+    return buildAnnotated(text, attrs, aligns, directions, lineSpacings, indents)
 }
 
 // ---- التحويل إلى فقرات للتصدير (DOCX / PDF) ----
@@ -245,12 +301,20 @@ data class RunOut(
     val highlightArgb: Int,
 )
 
-data class ParaOut(val alignCode: Int, val dirCode: Int, val runs: List<RunOut>)
+data class ParaOut(
+    val alignCode: Int,
+    val dirCode: Int,
+    val runs: List<RunOut>,
+    val lineSpacing: Float = 1f,
+    val indentLevel: Int = 0,
+)
 
 fun AnnotatedString.toParagraphsOut(): List<ParaOut> {
     val attrs = toCharAttrs()
     val aligns = toAligns()
     val directions = toDirections()
+    val lineSpacings = toLineSpacings()
+    val indents = toIndents()
     val result = mutableListOf<ParaOut>()
     val paras = paragraphSpans(text)
     paras.forEachIndexed { idx, (s, eRaw) ->
@@ -270,6 +334,8 @@ fun AnnotatedString.toParagraphsOut(): List<ParaOut> {
                 aligns.getOrElse(idx) { TextAlign.Start }.toCode(),
                 directions.getOrElse(idx) { TextDirection.Content }.toDirCode(),
                 runs,
+                lineSpacings.getOrElse(idx) { 1f },
+                indents.getOrElse(idx) { 0 },
             )
         )
     }
