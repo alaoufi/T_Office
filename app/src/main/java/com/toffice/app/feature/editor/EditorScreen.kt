@@ -31,6 +31,7 @@ import androidx.compose.material.icons.automirrored.filled.FormatAlignLeft
 import androidx.compose.material.icons.automirrored.filled.FormatAlignRight
 import androidx.compose.material.icons.automirrored.filled.FormatIndentDecrease
 import androidx.compose.material.icons.automirrored.filled.FormatIndentIncrease
+import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
 import androidx.compose.material.icons.automirrored.filled.FormatTextdirectionLToR
 import androidx.compose.material.icons.automirrored.filled.FormatTextdirectionRToL
 import androidx.compose.material.icons.automirrored.filled.Redo
@@ -46,6 +47,7 @@ import androidx.compose.material.icons.filled.FormatColorReset
 import androidx.compose.material.icons.filled.FormatColorText
 import androidx.compose.material.icons.filled.FormatItalic
 import androidx.compose.material.icons.filled.FormatLineSpacing
+import androidx.compose.material.icons.filled.FormatListNumbered
 import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.FormatUnderlined
 import androidx.compose.material.icons.filled.Language
@@ -137,7 +139,8 @@ fun EditorScreen(
     val undoStack = remember { mutableStateListOf<TextFieldValue>() }
     val redoStack = remember { mutableStateListOf<TextFieldValue>() }
 
-    fun update(new: TextFieldValue) {
+    fun update(newRaw: TextFieldValue) {
+        val new = RichTextOps.maybeContinueList(value, newRaw)
         if (new.annotatedString != value.annotatedString) {
             undoStack.add(value)
             if (undoStack.size > 120) undoStack.removeAt(0)
@@ -631,6 +634,15 @@ private fun FormatToolbar(value: TextFieldValue, onChange: (TextFieldValue) -> U
         }
         ToolToggle(Icons.AutoMirrored.Filled.FormatIndentDecrease, "إنقاص المسافة البادئة", false) {
             onChange(RichTextOps.changeIndent(value, -1))
+        }
+        ToolDivider()
+
+        // القوائم (نقطية / مرقّمة)
+        ToolToggle(Icons.AutoMirrored.Filled.FormatListBulleted, "قائمة نقطية", false) {
+            onChange(RichTextOps.toggleList(value, numbered = false))
+        }
+        ToolToggle(Icons.Default.FormatListNumbered, "قائمة مرقّمة", false) {
+            onChange(RichTextOps.toggleList(value, numbered = true))
         }
         ToolDivider()
 

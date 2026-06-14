@@ -1,11 +1,15 @@
 package com.toffice.app.feature.editor.model
 
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDirection
 
 /** عمليات التنسيق على محتوى المحرر (تعمل على التحديد الحالي). */
 object RichTextOps {
+
+    const val BULLET = "• "
+    private val NUM_RE = Regex("^(\\d+)\\. ")
 
     private fun bounds(v: TextFieldValue): Pair<Int, Int> {
         val s = minOf(v.selection.start, v.selection.end)
@@ -118,6 +122,114 @@ object RichTextOps {
             forEachSelectedParagraph(v.annotatedString.text, s, e) { idx ->
                 if (idx < dirs.size) dirs[idx] = direction
             }
+        }
+    }
+
+    // ---- القوائم النقطية/المرقّمة (العلامة نص فعلي) ----
+
+    /** طول علامة القائمة في بداية السطر (٠ إن لا توجد). */
+    private fun markerLength(text: String, lineStart: Int): Int {
+        var end = lineStart
+        while (end < text.length && text[end] != '\n') end++
+        val seg = text.substring(lineStart, end)
+        if (seg.startsWith(BULLET)) return BULLET.length
+        return NUM_RE.find(seg)?.value?.length ?: 0
+    }
+
+    /** يبدّل قائمة (نقطية أو مرقّمة) على الفقرات المحدّدة. */
+    fun toggleList(v: TextFieldValue, numbered: Boolean): TextFieldValue {
+        val a = v.annotatedString
+        val origText = a.text
+        val attrs = a.toCharAttrs()
+        val aligns = a.toAligns()
+        val dirs = a.toDirections()
+        val ls = a.toLineSpacings()
+        val ind = a.toIndents()
+        val paras = paragraphSpans(origText)
+        val (s, e) = bounds(v)
+        val selIdx = paras.indices.filter { i ->
+            val (ps, pe) = paras[i]
+            if (s == e) ps <= s && s <= pe else ps <= e && pe >= s
+        }
+        if (selIdx.isEmpty()) return v
+        val allMarked = selIdx.all { markerLength(origText, paras[it].first) > 0 }
+
+        val sb = StringBuilder(origText)
+        var offset = 0
+        var caret = v.selection.end
+        var n = 1
+        for (i in selIdx) {
+            val ps = paras[i].first + offset
+            val curLen = markerLength(sb.toString(), ps)
+            if (curLen > 0) {
+                sb.delete(ps, ps + curLen)
+                repeat(curLen) { if (ps < attrs.size) attrs.removeAt(ps) }
+                if (caret > ps) caret -= minOf(curLen, caret - ps)
+                offset -= curLen
+            }
+            if (!allMarked) {
+                val marker = if (numbered) "${n}. " else BULLET
+                sb.insert(ps, marker)
+                repeat(marker.length) { attrs.add(ps, CharAttrs()) }
+                if (caret >= ps) caret += marker.length
+                offset += marker.length
+                n++
+            }
+        }
+        val newText = sb.toString()
+        return v.copy(
+            annotatedString = buildAnnotated(newText, attrs, aligns, dirs, ls, ind),
+            selection = TextRange(caret.coerceIn(0, newText.length)),
+        )
+    }
+
+    /** متابعة القائمة تلقائياً عند Enter (وإنهاؤها عند عنصر فارغ). تُستدعى من معالج التغيير. */
+    fun maybeContinueList(old: TextFieldValue, new: TextFieldValue): TextFieldValue {
+        try {
+            if (new.text.length != old.text.length + 1) return new
+            val caret = new.selection.end
+            if (caret < 1 || caret > new.text.length || new.text[caret - 1] != '\n') return new
+            val prevStart = run {
+                var i = caret - 2
+                while (i >= 0 && new.text[i] != '\n') i--
+                i + 1
+            }
+            val prevLine = new.text.substring(prevStart, caret - 1)
+            val numMatch = NUM_RE.find(prevLine)
+            val marker = when {
+                prevLine.startsWith(BULLET) -> BULLET
+                numMatch != null -> "${numMatch.groupValues[1].toInt() + 1}. "
+                else -> return new
+            }
+            val attrs = new.annotatedString.toCharAttrs()
+            val aligns = new.annotatedString.toAligns()
+            val dirs = new.annotatedString.toDirections()
+            val ls = new.annotatedString.toLineSpacings()
+            val ind = new.annotatedString.toIndents()
+            // عنصر فارغ (علامة فقط) ثم Enter => إنهاء القائمة بحذف العلامة
+            val prevMarkerLen = markerLength(new.text, prevStart)
+            if (prevLine.length == prevMarkerLen) {
+                val sb = StringBuilder(new.text)
+                sb.delete(prevStart, prevStart + prevMarkerLen)
+                repeat(prevMarkerLen) { if (prevStart < attrs.size) attrs.removeAt(prevStart) }
+                val txt = sb.toString()
+                val newCaret = (caret - prevMarkerLen).coerceIn(0, txt.length)
+                return new.copy(
+                    annotatedString = buildAnnotated(txt, attrs, aligns, dirs, ls, ind),
+                    selection = TextRange(newCaret),
+                )
+            }
+            // أدرج علامة في السطر الجديد
+            val sb = StringBuilder(new.text)
+            sb.insert(caret, marker)
+            repeat(marker.length) { attrs.add(caret, CharAttrs()) }
+            val txt = sb.toString()
+            return new.copy(
+                annotatedString = buildAnnotated(txt, attrs, aligns, dirs, ls, ind),
+                selection = TextRange((caret + marker.length).coerceIn(0, txt.length)),
+            )
+        } catch (_: Exception) {
+            return new
         }
     }
 
