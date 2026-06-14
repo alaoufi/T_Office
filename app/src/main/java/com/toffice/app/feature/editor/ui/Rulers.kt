@@ -146,34 +146,33 @@ fun VerticalRuler(
     Box(Modifier.width(RULER_THICK_DP.dp).height(heightDp.dp).background(rulerBg)) {
         Canvas(Modifier.size(RULER_THICK_DP.dp, heightDp.dp)) {
             val w = size.width
-            val topY = marginTopPt * pxPerPt
-            val bottomY = size.height - marginBottomPt * pxPerPt
-            drawRect(shade, topLeft = androidx.compose.ui.geometry.Offset(0f, 0f),
-                size = androidx.compose.ui.geometry.Size(w, topY.coerceAtLeast(0f)))
-            if (bottomY < size.height) {
-                drawRect(shade, topLeft = androidx.compose.ui.geometry.Offset(0f, bottomY),
-                    size = androidx.compose.ui.geometry.Size(w, size.height - bottomY))
-            }
-            // الترقيم يبدأ من الهامش العلوي (الصفر عند الهامش، مثل WPS)
+            val pageHeightPx = pageHeightPt * pxPerPt
+            val pages = if (pageHeightPx > 0f) ceil(size.height / pageHeightPx).toInt().coerceAtLeast(1) else 1
             val maxCm = ceil(pageHeightPt / PT_PER_CM).toInt()
-            for (d in -maxCm..maxCm) {
-                val y = (marginTopPt + d * PT_PER_CM) * pxPerPt
-                if (y in 0f..size.height) {
-                    drawLine(tick, androidx.compose.ui.geometry.Offset(w * 0.45f, y),
-                        androidx.compose.ui.geometry.Offset(w, y), strokeWidth = 1.5f)
-                }
+            val paint = android.graphics.Paint().apply {
+                color = tick.toArgb()
+                textSize = 9f * density
+                isAntiAlias = true
+                textAlign = android.graphics.Paint.Align.CENTER
             }
-            drawContext.canvas.nativeCanvas.apply {
-                val paint = android.graphics.Paint().apply {
-                    color = tick.toArgb()
-                    textSize = 9f * density
-                    isAntiAlias = true
-                    textAlign = android.graphics.Paint.Align.CENTER
+            // الترقيم يعيد البدء من الهامش العلوي لكل صفحة (مثل WPS)
+            for (p in 0 until pages) {
+                val pageTop = p * pageHeightPx
+                // تظليل الهامش العلوي والسفلي لكل صفحة
+                drawRect(shade, topLeft = androidx.compose.ui.geometry.Offset(0f, pageTop),
+                    size = androidx.compose.ui.geometry.Size(w, (marginTopPt * pxPerPt).coerceAtLeast(0f)))
+                val pageBottom = (pageTop + pageHeightPx).coerceAtMost(size.height)
+                val botStart = pageTop + pageHeightPx - marginBottomPt * pxPerPt
+                if (botStart < pageBottom) {
+                    drawRect(shade, topLeft = androidx.compose.ui.geometry.Offset(0f, botStart),
+                        size = androidx.compose.ui.geometry.Size(w, pageBottom - botStart))
                 }
                 for (d in -maxCm..maxCm) {
-                    if (d == 0) continue
-                    val y = (marginTopPt + d * PT_PER_CM) * pxPerPt
-                    if (y in 0f..size.height) drawText(abs(d).toString(), w * 0.25f, y + 3f * density, paint)
+                    val y = pageTop + (marginTopPt + d * PT_PER_CM) * pxPerPt
+                    if (y < pageTop || y > pageBottom || y > size.height) continue
+                    drawLine(tick, androidx.compose.ui.geometry.Offset(w * 0.45f, y),
+                        androidx.compose.ui.geometry.Offset(w, y), strokeWidth = 1.5f)
+                    if (d != 0) drawContext.canvas.nativeCanvas.drawText(abs(d).toString(), w * 0.25f, y + 3f * density, paint)
                 }
             }
         }

@@ -91,14 +91,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.TextFieldValue
@@ -118,6 +122,7 @@ import com.toffice.app.feature.editor.model.RichTextOps
 import com.toffice.app.feature.editor.model.currentPresetId
 import com.toffice.app.feature.editor.model.isLandscape
 import com.toffice.app.feature.editor.model.pageSizeById
+import com.toffice.app.feature.editor.model.paginationPageCount
 import com.toffice.app.feature.editor.model.withSize
 import com.toffice.app.feature.editor.ui.HorizontalRuler
 import com.toffice.app.feature.editor.ui.VerticalRuler
@@ -147,6 +152,8 @@ fun EditorScreen(
     var focusTarget by remember { mutableStateOf(EditField.Body) }
     // الترويسة/التذييل قيد التحرير (null = مقفلة، تُفتح بنقر مزدوج فقط)
     var hfEditing by remember { mutableStateOf<EditField?>(null) }
+    // ارتفاع الورقة الفعلي (لمدّ المسطرة الجانبية ورسم فواصل الصفحات)
+    var sheetHeightPx by remember { mutableStateOf(0) }
 
     val undoStack = remember { mutableStateListOf<TextFieldValue>() }
     val redoStack = remember { mutableStateListOf<TextFieldValue>() }
@@ -346,9 +353,13 @@ fun EditorScreen(
                 ) {
                     val rulerThick = 22.dp
                     val gap = 2.dp
+                    val density = LocalDensity.current.density
                     val sheetWidthDp = maxWidth - rulerThick - gap
                     val scale = sheetWidthDp.value / page.pageWidthPt
                     val pageHeightDp = page.pageHeightPt * scale
+                    // ارتفاع المحتوى الفعلي وعدد الصفحات
+                    val sheetHeightDp = if (sheetHeightPx > 0) sheetHeightPx / density else pageHeightDp
+                    val pageCount = paginationPageCount(sheetHeightDp, pageHeightDp)
 
                     // اتجاه المسطرة يتبع اتجاه الفقرة الحالية للمتن (تلقائي ← اتجاه الصفحة)
                     val rulerRtl = when (RichTextOps.currentDirection(value)) {
@@ -372,7 +383,7 @@ fun EditorScreen(
                         Row {
                             VerticalRuler(
                                 pageHeightPt = page.pageHeightPt,
-                                heightDp = pageHeightDp,
+                                heightDp = sheetHeightDp,
                                 marginTopPt = page.marginTopPt,
                                 marginBottomPt = page.marginBottomPt,
                                 scale = scale,
@@ -382,6 +393,7 @@ fun EditorScreen(
                             PageSheet(
                                 widthDp = sheetWidthDp,
                                 pageHeightDp = pageHeightDp,
+                                pageCount = pageCount,
                                 page = page,
                                 scale = scale,
                                 value = value,
@@ -393,6 +405,7 @@ fun EditorScreen(
                                 hfEditing = hfEditing,
                                 onStartEditHF = { field -> hfEditing = field; focusTarget = field },
                                 onBodyFocus = { focusTarget = EditField.Body; hfEditing = null },
+                                onSheetHeight = { sheetHeightPx = it },
                             )
                         }
                         Spacer(Modifier.height(24.dp))
@@ -415,6 +428,7 @@ private fun CompositionLocalProviderDir(rtl: Boolean, content: @Composable () ->
 private fun PageSheet(
     widthDp: androidx.compose.ui.unit.Dp,
     pageHeightDp: Float,
+    pageCount: Int,
     page: PageSettings,
     scale: Float,
     value: TextFieldValue,
@@ -426,6 +440,7 @@ private fun PageSheet(
     hfEditing: EditField?,
     onStartEditHF: (EditField) -> Unit,
     onBodyFocus: () -> Unit,
+    onSheetHeight: (Int) -> Unit,
 ) {
     val mlDp = page.marginLeftPt * scale
     val mrDp = page.marginRightPt * scale
@@ -433,11 +448,38 @@ private fun PageSheet(
     val mbDp = page.marginBottomPt * scale
     val bodyMin = (pageHeightDp - mtDp - mbDp).coerceAtLeast(80f)
 
+    val density = LocalDensity.current.density
+    val breakColor = MaterialTheme.colorScheme.outline
     Column(
         Modifier
             .width(widthDp)
             .shadow(3.dp)
-            .background(Color.White),
+            .background(Color.White)
+            .onSizeChanged { onSheetHeight(it.height) }
+            .drawWithContent {
+                drawContent()
+                // خطوط فاصل الصفحات + رقم الصفحة
+                val pageH = pageHeightDp * density
+                val dash = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(12f, 8f))
+                val paint = android.graphics.Paint().apply {
+                    color = android.graphics.Color.argb(150, 120, 120, 120)
+                    textSize = 10f * density
+                    isAntiAlias = true
+                    textAlign = android.graphics.Paint.Align.CENTER
+                }
+                for (p in 1 until pageCount) {
+                    val y = p * pageH
+                    if (y >= size.height) break
+                    drawLine(
+                        breakColor,
+                        androidx.compose.ui.geometry.Offset(0f, y),
+                        androidx.compose.ui.geometry.Offset(size.width, y),
+                        strokeWidth = 1f,
+                        pathEffect = dash,
+                    )
+                    drawContext.canvas.nativeCanvas.drawText("صفحة ${p + 1}", size.width / 2f, y - 4f * density, paint)
+                }
+            },
     ) {
         // منطقة الهامش العلوي + الترويسة
         Box(
