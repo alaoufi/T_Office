@@ -37,16 +37,26 @@ import androidx.compose.material.icons.filled.FormatBold
 import androidx.compose.material.icons.filled.FormatColorFill
 import androidx.compose.material.icons.filled.FormatColorReset
 import androidx.compose.material.icons.filled.FormatItalic
+import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.FormatUnderlined
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Numbers
+import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.StrikethroughS
 import androidx.compose.material.icons.filled.Upload
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalTextStyle
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Switch
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -78,8 +88,13 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.toffice.app.feature.editor.model.DocBundle
 import com.toffice.app.feature.editor.model.DocSerializer
+import com.toffice.app.feature.editor.model.PAGE_SIZES
 import com.toffice.app.feature.editor.model.PageSettings
 import com.toffice.app.feature.editor.model.RichTextOps
+import com.toffice.app.feature.editor.model.currentPresetId
+import com.toffice.app.feature.editor.model.isLandscape
+import com.toffice.app.feature.editor.model.pageSizeById
+import com.toffice.app.feature.editor.model.withSize
 import com.toffice.app.feature.editor.ui.HorizontalRuler
 import com.toffice.app.feature.editor.ui.VerticalRuler
 
@@ -144,15 +159,24 @@ fun EditorScreen(
 
     LaunchedEffect(Unit) { viewModel.events.collect { snackbar.showSnackbar(it) } }
 
+    var showMenu by remember { mutableStateOf(false) }
+    var showPageSetup by remember { mutableStateOf(false) }
+
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument(MIME_DOCX)
     ) { uri ->
         if (uri != null) viewModel.exportDocx(uri, value.annotatedString, page, header, footer)
     }
+    val pdfLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/pdf")
+    ) { uri ->
+        if (uri != null) viewModel.exportPdf(uri, value.annotatedString, page, header, footer)
+    }
 
     fun persist() {
         if (initialized) {
-            viewModel.save(title, DocSerializer.serialize(DocBundle(value.annotatedString, page, header, footer)))
+            val json = DocSerializer.serialize(DocBundle(value.annotatedString, page, header, footer))
+            viewModel.save(title, json, value.annotatedString, page, header, footer)
         }
     }
 
@@ -188,17 +212,31 @@ fun EditorScreen(
                     IconButton(onClick = { redo() }, enabled = redoStack.isNotEmpty()) {
                         Icon(Icons.AutoMirrored.Filled.Redo, contentDescription = "إعادة")
                     }
-                    IconButton(onClick = { page = page.copy(showPageNumber = !page.showPageNumber) }) {
-                        Icon(
-                            Icons.Default.Numbers,
-                            contentDescription = "ترقيم الصفحات",
-                            tint = if (page.showPageNumber) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
                     IconButton(onClick = { persist() }) { Icon(Icons.Default.Save, contentDescription = "حفظ") }
-                    IconButton(onClick = { exportLauncher.launch("${title.ifBlank { "مستند" }}.docx") }) {
-                        Icon(Icons.Default.Upload, contentDescription = "تصدير Word")
+                    IconButton(onClick = { showMenu = true }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "المزيد")
+                    }
+                    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                        DropdownMenuItem(
+                            text = { Text("إعداد الصفحة") },
+                            leadingIcon = { Icon(Icons.Default.AspectRatio, null) },
+                            onClick = { showMenu = false; showPageSetup = true },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(if (page.showPageNumber) "إخفاء ترقيم الصفحات" else "إظهار ترقيم الصفحات") },
+                            leadingIcon = { Icon(Icons.Default.Numbers, null) },
+                            onClick = { page = page.copy(showPageNumber = !page.showPageNumber); showMenu = false },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("تصدير Word (DOCX)") },
+                            leadingIcon = { Icon(Icons.Default.Upload, null) },
+                            onClick = { showMenu = false; exportLauncher.launch("${title.ifBlank { "مستند" }}.docx") },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("تصدير PDF") },
+                            leadingIcon = { Icon(Icons.Default.PictureAsPdf, null) },
+                            onClick = { showMenu = false; pdfLauncher.launch("${title.ifBlank { "مستند" }}.pdf") },
+                        )
                     }
                 },
             )
@@ -206,6 +244,14 @@ fun EditorScreen(
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(top = padding.calculateTopPadding())) {
             FormatToolbar(value = value, onChange = { update(it) })
+
+            if (showPageSetup) {
+                PageSetupDialog(
+                    page = page,
+                    onDismiss = { showPageSetup = false },
+                    onApply = { newPage -> page = newPage; showPageSetup = false },
+                )
+            }
 
             CompositionLocalProviderLtr {
                 BoxWithConstraints(
@@ -361,6 +407,46 @@ private fun PlainEditField(value: String, onChange: (String) -> Unit, placeholde
 }
 
 @Composable
+private fun PageSetupDialog(
+    page: PageSettings,
+    onDismiss: () -> Unit,
+    onApply: (PageSettings) -> Unit,
+) {
+    var sizeId by remember { mutableStateOf(page.currentPresetId()) }
+    var landscape by remember { mutableStateOf(page.isLandscape()) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("إعداد الصفحة") },
+        text = {
+            Column {
+                Text("حجم الصفحة", style = MaterialTheme.typography.labelLarge)
+                PAGE_SIZES.forEach { preset ->
+                    Row(
+                        Modifier.fillMaxWidth().clickable { sizeId = preset.id }.padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(selected = sizeId == preset.id, onClick = { sizeId = preset.id })
+                        Text(preset.label, Modifier.padding(start = 4.dp))
+                    }
+                }
+                Row(
+                    Modifier.fillMaxWidth().padding(top = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("اتجاه أفقي", Modifier.weight(1f))
+                    Switch(checked = landscape, onCheckedChange = { landscape = it })
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onApply(page.withSize(pageSizeById(sizeId), landscape)) }) { Text("تطبيق") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } },
+    )
+}
+
+@Composable
 private fun FormatToolbar(value: TextFieldValue, onChange: (TextFieldValue) -> Unit) {
     val cur = RichTextOps.currentAttrs(value)
     Row(
@@ -375,6 +461,7 @@ private fun FormatToolbar(value: TextFieldValue, onChange: (TextFieldValue) -> U
         ToolToggle(Icons.Default.FormatUnderlined, "تسطير", cur.underline) { onChange(RichTextOps.toggleUnderline(value)) }
         ToolToggle(Icons.Default.StrikethroughS, "يتوسطه خط", cur.strike) { onChange(RichTextOps.toggleStrike(value)) }
         ToolDivider()
+        ToolButton(Icons.Default.Language, "محاذاة تلقائية حسب اللغة") { onChange(RichTextOps.setAlign(value, TextAlign.Start)) }
         ToolButton(Icons.AutoMirrored.Filled.FormatAlignRight, "يمين") { onChange(RichTextOps.setAlign(value, TextAlign.Right)) }
         ToolButton(Icons.Default.FormatAlignCenter, "توسيط") { onChange(RichTextOps.setAlign(value, TextAlign.Center)) }
         ToolButton(Icons.AutoMirrored.Filled.FormatAlignLeft, "يسار") { onChange(RichTextOps.setAlign(value, TextAlign.Left)) }

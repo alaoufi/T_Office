@@ -100,20 +100,37 @@ object DocxWriter {
     }
 
     private fun paragraph(p: ParaOut): String {
+        val rtl = isRtl(p.runs.joinToString("") { it.text })
         val jc = when (p.alignCode) {
             1 -> "center"
             2 -> "left"
             3 -> "both"
-            else -> "right"
+            0 -> "right"
+            else -> if (rtl) "right" else "left" // تلقائي حسب اللغة
         }
         val sb = StringBuilder()
-        sb.append("<w:p><w:pPr><w:bidi/><w:jc w:val=\"").append(jc).append("\"/></w:pPr>")
-        for (r in p.runs) sb.append(run(r))
+        sb.append("<w:p><w:pPr>")
+        if (rtl) sb.append("<w:bidi/>")
+        sb.append("<w:jc w:val=\"").append(jc).append("\"/></w:pPr>")
+        for (r in p.runs) sb.append(run(r, rtl))
         sb.append("</w:p>")
         return sb.toString()
     }
 
-    private fun run(r: RunOut): String {
+    /** يكتشف إن كانت الفقرة عربية/RTL من أول حرف ذي اتجاه قوي. */
+    private fun isRtl(text: String): Boolean {
+        for (c in text) {
+            val d = Character.getDirectionality(c)
+            when (d) {
+                Character.DIRECTIONALITY_RIGHT_TO_LEFT,
+                Character.DIRECTIONALITY_RIGHT_TO_LEFT_ARABIC -> return true
+                Character.DIRECTIONALITY_LEFT_TO_RIGHT -> return false
+            }
+        }
+        return true // افتراضي للعربية
+    }
+
+    private fun run(r: RunOut, rtl: Boolean): String {
         val sb = StringBuilder()
         sb.append("<w:r><w:rPr>")
         if (r.bold) sb.append("<w:b/><w:bCs/>")
@@ -131,7 +148,7 @@ object DocxWriter {
             val hex = String.format("%06X", r.highlightArgb and 0xFFFFFF)
             sb.append("<w:shd w:val=\"clear\" w:color=\"auto\" w:fill=\"").append(hex).append("\"/>")
         }
-        sb.append("<w:rtl/>")
+        if (rtl) sb.append("<w:rtl/>")
         sb.append("</w:rPr>")
         sb.append("<w:t xml:space=\"preserve\">").append(escape(r.text)).append("</w:t>")
         sb.append("</w:r>")

@@ -86,7 +86,7 @@ object DocxReader {
                     "p" -> {
                         if (!firstParagraph) { text.append('\n'); attrs.add(CharAttrs()) }
                         firstParagraph = false
-                        curAlign = TextAlign.Right
+                        curAlign = TextAlign.Start
                     }
                     "jc" -> curAlign = mapAlign(attr(parser, "val"))
                     "r" -> { rb = false; ri = false; ru = false; rst = false; rsz = DEFAULT_FONT_SP; rc = COLOR_DEFAULT; rhl = COLOR_DEFAULT }

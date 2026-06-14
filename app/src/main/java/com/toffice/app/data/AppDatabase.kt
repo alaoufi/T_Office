@@ -9,7 +9,7 @@ import com.toffice.app.data.task.TaskDao
 
 @Database(
     entities = [Task::class, DocumentEntity::class],
-    version = 2,
+    version = 3,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {

@@ -8,6 +8,7 @@ data class DocumentEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val title: String,
     val contentJson: String = "",
+    val sourceUri: String? = null, // رابط ملف DOCX الأصلي للحفظ بنفس الصيغة
     val updatedAt: Long = System.currentTimeMillis(),
     val createdAt: Long = System.currentTimeMillis(),
 )

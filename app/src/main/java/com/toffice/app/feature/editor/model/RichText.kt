@@ -10,6 +10,7 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
 import org.json.JSONArray
@@ -51,19 +52,22 @@ data class CharAttrs(
 }
 
 // ---- محاذاة الفقرة <-> رقم ----
+// 4 = تلقائي (يتبع لغة الفقرة: عربي→يمين، لاتيني→يسار) وهو الافتراضي
 
 fun TextAlign.toCode(): Int = when (this) {
     TextAlign.Center -> 1
     TextAlign.Left -> 2
     TextAlign.Justify -> 3
-    else -> 0 // Right (افتراضي للعربية)
+    TextAlign.Right -> 0
+    else -> 4 // Start = تلقائي
 }
 
 fun Int.toTextAlign(): TextAlign = when (this) {
+    0 -> TextAlign.Right
     1 -> TextAlign.Center
     2 -> TextAlign.Left
     3 -> TextAlign.Justify
-    else -> TextAlign.Right
+    else -> TextAlign.Start // تلقائي
 }
 
 /** حدود الفقرات (بداية، نهاية) مقسّمة على '\n'. */
@@ -103,11 +107,11 @@ fun AnnotatedString.toCharAttrs(): MutableList<CharAttrs> {
     return attrs
 }
 
-/** يستخرج محاذاة كل فقرة. */
+/** يستخرج محاذاة كل فقرة (الافتراضي تلقائي = Start). */
 fun AnnotatedString.toAligns(): MutableList<TextAlign> {
     val paras = paragraphSpans(text)
     return paras.map { (s, _) ->
-        paragraphStyles.firstOrNull { it.start == s }?.item?.textAlign ?: TextAlign.Right
+        paragraphStyles.firstOrNull { it.start == s }?.item?.textAlign ?: TextAlign.Start
     }.toMutableList()
 }
 
@@ -121,8 +125,9 @@ fun buildAnnotated(
     val paras = paragraphSpans(text)
     paras.forEachIndexed { idx, (s, e) ->
         if (e > s) {
-            val al = aligns.getOrElse(idx) { TextAlign.Right }
-            addStyle(ParagraphStyle(textAlign = al), s, e)
+            val al = aligns.getOrElse(idx) { TextAlign.Start }
+            // textDirection = Content يجعل اتجاه الفقرة يتبع لغتها تلقائياً
+            addStyle(ParagraphStyle(textAlign = al, textDirection = TextDirection.Content), s, e)
         }
     }
     var i = 0
@@ -227,7 +232,7 @@ fun AnnotatedString.toParagraphsOut(): List<ParaOut> {
             runs.add(RunOut(text.substring(i, j), a.bold, a.italic, a.underline, a.strike, a.sizeSp, a.colorArgb, a.highlightArgb))
             i = j
         }
-        result.add(ParaOut(aligns.getOrElse(idx) { TextAlign.Right }.toCode(), runs))
+        result.add(ParaOut(aligns.getOrElse(idx) { TextAlign.Start }.toCode(), runs))
     }
     return result
 }

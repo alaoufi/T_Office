@@ -11,6 +11,7 @@ import com.toffice.app.feature.common.PlaceholderScreen
 import com.toffice.app.feature.dashboard.DashboardScreen
 import com.toffice.app.feature.editor.DocumentsListScreen
 import com.toffice.app.feature.editor.EditorScreen
+import com.toffice.app.feature.settings.SettingsScreen
 import com.toffice.app.feature.tasks.TasksScreen
 
 @Composable
@@ -53,7 +54,7 @@ fun AppNavHost(navController: NavHostController = rememberNavController()) {
             PlaceholderScreen(title = "النسخ الاحتياطي", onBack = { navController.popBackStack() })
         }
         composable(Routes.SETTINGS) {
-            PlaceholderScreen(title = "الإعدادات", onBack = { navController.popBackStack() })
+            SettingsScreen(onBack = { navController.popBackStack() })
         }
     }
 }

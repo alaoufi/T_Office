@@ -1,13 +1,17 @@
 package com.toffice.app.feature.editor
 
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
+import androidx.compose.ui.text.AnnotatedString
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.toffice.app.core.settings.SettingsRepository
 import com.toffice.app.data.document.DocumentDao
 import com.toffice.app.data.document.DocumentEntity
 import com.toffice.app.feature.editor.io.DocxReader
+import com.toffice.app.feature.editor.model.DocBundle
 import com.toffice.app.feature.editor.model.DocSerializer
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -29,6 +33,7 @@ data class DocumentsUiState(
 @HiltViewModel
 class DocumentsViewModel @Inject constructor(
     private val dao: DocumentDao,
+    private val settings: SettingsRepository,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
@@ -41,13 +46,23 @@ class DocumentsViewModel @Inject constructor(
 
     fun createNew(onCreated: (Long) -> Unit) {
         viewModelScope.launch {
-            val id = dao.insert(DocumentEntity(title = "مستند جديد", contentJson = ""))
+            val page = settings.defaultPageSettings()
+            val json = DocSerializer.serialize(DocBundle(AnnotatedString(""), page, "", ""))
+            val id = dao.insert(DocumentEntity(title = "مستند جديد", contentJson = json))
             onCreated(id)
         }
     }
 
     fun importDocx(uri: Uri, onImported: (Long) -> Unit) {
         viewModelScope.launch {
+            // الاحتفاظ بإذن دائم للقراءة والكتابة (للحفظ بنفس الملف لاحقاً)
+            val canWriteBack = runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                )
+            }.isSuccess
+
             val json = withContext(Dispatchers.IO) {
                 try {
                     context.contentResolver.openInputStream(uri)?.use {
@@ -62,7 +77,13 @@ class DocumentsViewModel @Inject constructor(
                 return@launch
             }
             val name = displayName(uri)
-            val id = dao.insert(DocumentEntity(title = name, contentJson = json))
+            val id = dao.insert(
+                DocumentEntity(
+                    title = name,
+                    contentJson = json,
+                    sourceUri = if (canWriteBack) uri.toString() else null,
+                )
+            )
             _events.emit("تم فتح الملف")
             onImported(id)
         }

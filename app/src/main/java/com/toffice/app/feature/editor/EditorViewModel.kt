@@ -8,6 +8,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.toffice.app.data.document.DocumentDao
 import com.toffice.app.feature.editor.io.DocxWriter
+import com.toffice.app.feature.editor.io.PdfExporter
 import com.toffice.app.feature.editor.model.PageSettings
 import com.toffice.app.feature.editor.model.toParagraphsOut
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -24,6 +25,7 @@ data class EditorUiState(
     val isLoading: Boolean = true,
     val title: String = "",
     val json: String = "",
+    val hasSource: Boolean = false,
 )
 
 @HiltViewModel
@@ -34,6 +36,7 @@ class EditorViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val docId: Long = savedStateHandle.get<String>("docId")?.toLongOrNull() ?: -1L
+    private var sourceUri: String? = null
 
     private val _ui = MutableStateFlow(EditorUiState())
     val ui = _ui.asStateFlow()
@@ -44,15 +47,25 @@ class EditorViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             val doc = if (docId > 0) dao.getById(docId) else null
+            sourceUri = doc?.sourceUri
             _ui.value = EditorUiState(
                 isLoading = false,
                 title = doc?.title ?: "مستند جديد",
                 json = doc?.contentJson ?: "",
+                hasSource = sourceUri != null,
             )
         }
     }
 
-    fun save(title: String, json: String) {
+    /** حفظ داخلي + حفظ بنفس ملف DOCX الأصلي إن وُجد. */
+    fun save(
+        title: String,
+        json: String,
+        annotated: AnnotatedString,
+        page: PageSettings,
+        header: String,
+        footer: String,
+    ) {
         viewModelScope.launch {
             val existing = if (docId > 0) dao.getById(docId) else null
             if (existing != null) {
@@ -63,27 +76,53 @@ class EditorViewModel @Inject constructor(
                         updatedAt = System.currentTimeMillis(),
                     )
                 )
+            }
+            val src = sourceUri
+            if (src != null) {
+                val ok = writeDocxTo(Uri.parse(src), annotated, page, header, footer)
+                _events.emit(if (ok) "تم الحفظ في ملف Word الأصلي" else "تم الحفظ داخلياً (تعذّر الكتابة على الملف الأصلي)")
+            } else {
                 _events.emit("تم الحفظ")
             }
         }
     }
 
-    fun exportDocx(
+    fun exportDocx(uri: Uri, annotated: AnnotatedString, page: PageSettings, header: String, footer: String) {
+        viewModelScope.launch {
+            val ok = writeDocxTo(uri, annotated, page, header, footer)
+            _events.emit(if (ok) "تم تصدير ملف Word بنجاح" else "تعذّر التصدير")
+        }
+    }
+
+    fun exportPdf(uri: Uri, annotated: AnnotatedString, page: PageSettings, header: String, footer: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                context.contentResolver.openOutputStream(uri)?.use {
+                    PdfExporter.export(it, annotated, page, header, footer)
+                }
+                _events.emit("تم تصدير PDF بنجاح")
+            } catch (e: Exception) {
+                _events.emit("تعذّر تصدير PDF: ${e.message}")
+            }
+        }
+    }
+
+    private suspend fun writeDocxTo(
         uri: Uri,
         annotated: AnnotatedString,
         page: PageSettings,
         header: String,
         footer: String,
-    ) {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                context.contentResolver.openOutputStream(uri)?.use {
-                    DocxWriter.write(it, annotated.toParagraphsOut(), page, header, footer)
-                }
-                _events.emit("تم تصدير ملف Word بنجاح")
-            } catch (e: Exception) {
-                _events.emit("تعذّر التصدير: ${e.message}")
-            }
+    ): Boolean = kotlinx.coroutines.withContext(Dispatchers.IO) {
+        try {
+            // "wt" يقتطع الملف قبل الكتابة لتفادي بقايا قديمة
+            val mode = if (uri.scheme == "content") "wt" else "w"
+            context.contentResolver.openOutputStream(uri, mode)?.use {
+                DocxWriter.write(it, annotated.toParagraphsOut(), page, header, footer)
+            } ?: return@withContext false
+            true
+        } catch (e: Exception) {
+            false
         }
     }
 }

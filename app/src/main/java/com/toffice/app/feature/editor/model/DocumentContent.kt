@@ -21,6 +21,40 @@ data class PageSettings(
     val showPageNumber: Boolean = false,
 )
 
+/** قياس صفحة جاهز (الأبعاد بالنقاط، وضع عمودي). */
+data class PageSizePreset(val id: String, val label: String, val widthPt: Float, val heightPt: Float)
+
+val PAGE_SIZES = listOf(
+    PageSizePreset("A4", "A4 — ٢١ × ٢٩٫٧ سم", 595f, 842f),
+    PageSizePreset("LETTER", "Letter — ٨٫٥ × ١١ بوصة", 612f, 792f),
+    PageSizePreset("LEGAL", "Legal — ٨٫٥ × ١٤ بوصة", 612f, 1008f),
+    PageSizePreset("A5", "A5 — ١٤٫٨ × ٢١ سم", 420f, 595f),
+    PageSizePreset("A3", "A3 — ٢٩٫٧ × ٤٢ سم", 842f, 1191f),
+)
+
+fun pageSizeById(id: String): PageSizePreset = PAGE_SIZES.firstOrNull { it.id == id } ?: PAGE_SIZES[0]
+
+/** يطبّق قياساً واتجاهاً على إعدادات الصفحة. */
+fun PageSettings.withSize(preset: PageSizePreset, landscape: Boolean): PageSettings {
+    val shortSide = minOf(preset.widthPt, preset.heightPt)
+    val longSide = maxOf(preset.widthPt, preset.heightPt)
+    return copy(
+        pageWidthPt = if (landscape) longSide else shortSide,
+        pageHeightPt = if (landscape) shortSide else longSide,
+    )
+}
+
+fun PageSettings.isLandscape(): Boolean = pageWidthPt > pageHeightPt
+
+/** معرّف القياس الحالي إن طابق أحد الجاهزة (بأي اتجاه). */
+fun PageSettings.currentPresetId(): String {
+    val w = minOf(pageWidthPt, pageHeightPt)
+    val h = maxOf(pageWidthPt, pageHeightPt)
+    return PAGE_SIZES.firstOrNull {
+        kotlin.math.abs(it.widthPt - w) < 2f && kotlin.math.abs(it.heightPt - h) < 2f
+    }?.id ?: "A4"
+}
+
 /** المستند الكامل: المتن المنسّق + إعدادات الصفحة + الترويسة + التذييل. */
 data class DocBundle(
     val body: AnnotatedString,
