@@ -35,9 +35,13 @@ object DocxReader {
             footerText = footerText.lines().filterNot { it.trim().matches(Regex("\\d+")) }.joinToString("\n").trim()
         }
 
+        // اتجاه الصفحة من قسم sectPr (bidi)
+        val sectPr = Regex("<w:sectPr[\\s\\S]*?</w:sectPr>").find(docXml)?.value
+        val rtlPage = if (sectPr != null) sectPr.contains("<w:bidi") else true
+
         return DocBundle(
             body = parsed.first,
-            page = parsed.second.copy(showPageNumber = showPageNumber),
+            page = parsed.second.copy(showPageNumber = showPageNumber, rtlPage = rtlPage),
             header = headerXml?.let { plainText(it) } ?: "",
             footer = footerText,
         )

@@ -33,6 +33,7 @@ fun HorizontalRuler(
     marginLeftPt: Float,
     marginRightPt: Float,
     scale: Float, // dp لكل نقطة
+    rtl: Boolean = false,
     onChange: (left: Float, right: Float) -> Unit,
 ) {
     val density = LocalDensity.current.density
@@ -58,14 +59,15 @@ fun HorizontalRuler(
                 size = androidx.compose.ui.geometry.Size(leftX, h))
             drawRect(shade, topLeft = androidx.compose.ui.geometry.Offset(rightX, 0f),
                 size = androidx.compose.ui.geometry.Size(size.width - rightX, h))
-            // علامات السنتيمتر
+            // علامات السنتيمتر (تبدأ من اليمين عند RTL)
             val cmCount = ceil(pageWidthPt / PT_PER_CM).toInt()
+            fun mapX(d: Float): Float = if (rtl) size.width - d else d
             for (cm in 0..cmCount) {
-                val x = cm * PT_PER_CM * pxPerPt
+                val x = mapX(cm * PT_PER_CM * pxPerPt)
                 drawLine(tick, androidx.compose.ui.geometry.Offset(x, h * 0.45f),
                     androidx.compose.ui.geometry.Offset(x, h), strokeWidth = 1.5f)
                 if (cm < cmCount) {
-                    val xHalf = (cm + 0.5f) * PT_PER_CM * pxPerPt
+                    val xHalf = mapX((cm + 0.5f) * PT_PER_CM * pxPerPt)
                     drawLine(tick, androidx.compose.ui.geometry.Offset(xHalf, h * 0.7f),
                         androidx.compose.ui.geometry.Offset(xHalf, h), strokeWidth = 1f)
                 }
@@ -79,7 +81,7 @@ fun HorizontalRuler(
                     textAlign = android.graphics.Paint.Align.CENTER
                 }
                 for (cm in 0..cmCount) {
-                    val x = cm * PT_PER_CM * pxPerPt
+                    val x = mapX(cm * PT_PER_CM * pxPerPt)
                     drawText(cm.toString(), x, h * 0.42f, paint)
                 }
             }

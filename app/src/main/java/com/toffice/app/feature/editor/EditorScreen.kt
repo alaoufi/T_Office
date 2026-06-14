@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.absolutePadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -270,7 +271,7 @@ fun EditorScreen(
                 )
             }
 
-            CompositionLocalProviderLtr {
+            CompositionLocalProviderDir(page.rtlPage) {
                 BoxWithConstraints(
                     Modifier
                         .fillMaxSize()
@@ -291,6 +292,7 @@ fun EditorScreen(
                                 marginLeftPt = page.marginLeftPt,
                                 marginRightPt = page.marginRightPt,
                                 scale = scale,
+                                rtl = page.rtlPage,
                                 onChange = { l, r -> page = page.copy(marginLeftPt = l, marginRightPt = r) },
                             )
                         }
@@ -327,9 +329,10 @@ fun EditorScreen(
 }
 
 @Composable
-private fun CompositionLocalProviderLtr(content: @Composable () -> Unit) {
+private fun CompositionLocalProviderDir(rtl: Boolean, content: @Composable () -> Unit) {
     androidx.compose.runtime.CompositionLocalProvider(
-        LocalLayoutDirection provides LayoutDirection.Ltr, content = content,
+        LocalLayoutDirection provides if (rtl) LayoutDirection.Rtl else LayoutDirection.Ltr,
+        content = content,
     )
 }
 
@@ -363,7 +366,7 @@ private fun PageSheet(
             Modifier
                 .fillMaxWidth()
                 .height(mtDp.dp)
-                .padding(start = mlDp.dp, end = mrDp.dp, bottom = 2.dp),
+                .absolutePadding(left = mlDp.dp, right = mrDp.dp, bottom = 2.dp),
             contentAlignment = Alignment.BottomCenter,
         ) {
             PlainEditField(header, onHeaderChange, "الترويسة", Color(0xFF888888), Modifier.fillMaxWidth())
@@ -375,7 +378,7 @@ private fun PageSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = bodyMin.dp)
-                .padding(start = mlDp.dp, end = mrDp.dp),
+                .absolutePadding(left = mlDp.dp, right = mrDp.dp),
             textStyle = TextStyle(fontSize = 16.sp, color = Color(0xFF1A1A1A)),
             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
             decorationBox = { inner ->
@@ -390,7 +393,7 @@ private fun PageSheet(
             Modifier
                 .fillMaxWidth()
                 .height(mbDp.dp)
-                .padding(start = mlDp.dp, end = mrDp.dp, top = 2.dp, bottom = 2.dp),
+                .absolutePadding(left = mlDp.dp, right = mrDp.dp, top = 2.dp, bottom = 2.dp),
         ) {
             PlainEditField(footer, onFooterChange, "التذييل", Color(0xFF888888), Modifier.align(Alignment.TopCenter))
             if (page.showPageNumber) {
@@ -431,12 +434,13 @@ private fun PageSetupDialog(
 ) {
     var sizeId by remember { mutableStateOf(page.currentPresetId()) }
     var landscape by remember { mutableStateOf(page.isLandscape()) }
+    var rtlPage by remember { mutableStateOf(page.rtlPage) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("إعداد الصفحة") },
         text = {
-            Column {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
                 Text("حجم الصفحة", style = MaterialTheme.typography.labelLarge)
                 PAGE_SIZES.forEach { preset ->
                     Row(
@@ -451,13 +455,22 @@ private fun PageSetupDialog(
                     Modifier.fillMaxWidth().padding(top = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("اتجاه أفقي", Modifier.weight(1f))
+                    Text("توجيه أفقي (Landscape)", Modifier.weight(1f))
                     Switch(checked = landscape, onCheckedChange = { landscape = it })
+                }
+                Row(
+                    Modifier.fillMaxWidth().padding(top = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("اتجاه الصفحة عربي (من اليمين)", Modifier.weight(1f))
+                    Switch(checked = rtlPage, onCheckedChange = { rtlPage = it })
                 }
             }
         },
         confirmButton = {
-            TextButton(onClick = { onApply(page.withSize(pageSizeById(sizeId), landscape)) }) { Text("تطبيق") }
+            TextButton(onClick = {
+                onApply(page.withSize(pageSizeById(sizeId), landscape).copy(rtlPage = rtlPage))
+            }) { Text("تطبيق") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } },
     )

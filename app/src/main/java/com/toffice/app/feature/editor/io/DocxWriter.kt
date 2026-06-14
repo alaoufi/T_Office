@@ -94,7 +94,7 @@ object DocxWriter {
             .append(" w:bottom=\"").append(page.marginBottomPt.ptToTwips()).append("\"")
             .append(" w:left=\"").append(page.marginLeftPt.ptToTwips()).append("\"")
             .append(" w:header=\"708\" w:footer=\"708\" w:gutter=\"0\"/>")
-        sb.append("<w:bidi/>")
+        if (page.rtlPage) sb.append("<w:bidi/>")
         sb.append("</w:sectPr>")
         return sb.toString()
     }

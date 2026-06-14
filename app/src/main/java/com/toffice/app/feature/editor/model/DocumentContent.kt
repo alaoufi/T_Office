@@ -19,6 +19,7 @@ data class PageSettings(
     val marginTopPt: Float = 72f,
     val marginBottomPt: Float = 72f,
     val showPageNumber: Boolean = false,
+    val rtlPage: Boolean = true, // اتجاه الصفحة كاملة (عربي افتراضياً)
 )
 
 /** قياس صفحة جاهز (الأبعاد بالنقاط، وضع عمودي). */
@@ -76,6 +77,7 @@ object DocSerializer {
             .put("mT", bundle.page.marginTopPt.toDouble())
             .put("mB", bundle.page.marginBottomPt.toDouble())
             .put("pn", bundle.page.showPageNumber)
+            .put("rtl", bundle.page.rtlPage)
         return JSONObject()
             .put("body", bodyObj)
             .put("page", page)
@@ -101,6 +103,7 @@ object DocSerializer {
             marginTopPt = p.optDouble("mT", 72.0).toFloat(),
             marginBottomPt = p.optDouble("mB", 72.0).toFloat(),
             showPageNumber = p.optBoolean("pn", false),
+            rtlPage = p.optBoolean("rtl", true),
         ) else PageSettings()
         return DocBundle(
             body = body,
