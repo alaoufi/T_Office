@@ -74,7 +74,7 @@ object DocxWriter {
         val sb = StringBuilder()
         sb.append("""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>""")
         sb.append("""<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>""")
-        val paras = if (paragraphs.isEmpty()) listOf(ParaOut(0, emptyList())) else paragraphs
+        val paras = if (paragraphs.isEmpty()) listOf(ParaOut(0, 0, emptyList())) else paragraphs
         for (p in paras) sb.append(paragraph(p))
         sb.append(sectPr(page, hasHeader, hasFooter))
         sb.append("""</w:body></w:document>""")
@@ -100,7 +100,11 @@ object DocxWriter {
     }
 
     private fun paragraph(p: ParaOut): String {
-        val rtl = isRtl(p.runs.joinToString("") { it.text })
+        val rtl = when (p.dirCode) {
+            1 -> true
+            2 -> false
+            else -> isRtl(p.runs.joinToString("") { it.text }) // تلقائي
+        }
         val jc = when (p.alignCode) {
             1 -> "center"
             2 -> "left"

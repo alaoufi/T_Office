@@ -28,22 +28,27 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.FormatAlignLeft
 import androidx.compose.material.icons.automirrored.filled.FormatAlignRight
+import androidx.compose.material.icons.automirrored.filled.FormatTextdirectionLToR
+import androidx.compose.material.icons.automirrored.filled.FormatTextdirectionRToL
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
-import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.AspectRatio
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.FormatAlignCenter
 import androidx.compose.material.icons.filled.FormatAlignJustify
 import androidx.compose.material.icons.filled.FormatBold
 import androidx.compose.material.icons.filled.FormatColorFill
 import androidx.compose.material.icons.filled.FormatColorReset
+import androidx.compose.material.icons.filled.FormatColorText
 import androidx.compose.material.icons.filled.FormatItalic
-import androidx.compose.material.icons.filled.AspectRatio
+import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.FormatUnderlined
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Numbers
 import androidx.compose.material.icons.filled.PictureAsPdf
-import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.StrikethroughS
 import androidx.compose.material.icons.filled.Upload
@@ -82,6 +87,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -457,9 +463,20 @@ private fun PageSetupDialog(
     )
 }
 
+private val FONT_SIZES = listOf(10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 72)
+
 @Composable
 private fun FormatToolbar(value: TextFieldValue, onChange: (TextFieldValue) -> Unit) {
     val cur = RichTextOps.currentAttrs(value)
+    val curAlign = RichTextOps.currentAlign(value)
+    val curDir = RichTextOps.currentDirection(value)
+
+    var sizeMenu by remember { mutableStateOf(false) }
+    var colorMenu by remember { mutableStateOf(false) }
+    var alignMenu by remember { mutableStateOf(false) }
+    var dirMenu by remember { mutableStateOf(false) }
+    var moreMenu by remember { mutableStateOf(false) }
+
     Row(
         Modifier
             .fillMaxWidth()
@@ -470,34 +487,117 @@ private fun FormatToolbar(value: TextFieldValue, onChange: (TextFieldValue) -> U
         ToolToggle(Icons.Default.FormatBold, "غامق", cur.bold) { onChange(RichTextOps.toggleBold(value)) }
         ToolToggle(Icons.Default.FormatItalic, "مائل", cur.italic) { onChange(RichTextOps.toggleItalic(value)) }
         ToolToggle(Icons.Default.FormatUnderlined, "تسطير", cur.underline) { onChange(RichTextOps.toggleUnderline(value)) }
-        ToolToggle(Icons.Default.StrikethroughS, "يتوسطه خط", cur.strike) { onChange(RichTextOps.toggleStrike(value)) }
         ToolDivider()
-        ToolButton(Icons.Default.Language, "محاذاة تلقائية حسب اللغة") { onChange(RichTextOps.setAlign(value, TextAlign.Start)) }
-        ToolButton(Icons.AutoMirrored.Filled.FormatAlignRight, "يمين") { onChange(RichTextOps.setAlign(value, TextAlign.Right)) }
-        ToolButton(Icons.Default.FormatAlignCenter, "توسيط") { onChange(RichTextOps.setAlign(value, TextAlign.Center)) }
-        ToolButton(Icons.AutoMirrored.Filled.FormatAlignLeft, "يسار") { onChange(RichTextOps.setAlign(value, TextAlign.Left)) }
-        ToolButton(Icons.Default.FormatAlignJustify, "ضبط") { onChange(RichTextOps.setAlign(value, TextAlign.Justify)) }
+
+        // حجم الخط (قائمة)
+        Box {
+            Row(
+                Modifier.clickable { sizeMenu = true }.padding(horizontal = 6.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Default.FormatSize, "حجم الخط", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(" ${cur.sizeSp} ", style = MaterialTheme.typography.labelLarge)
+                Icon(Icons.Default.ArrowDropDown, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            DropdownMenu(expanded = sizeMenu, onDismissRequest = { sizeMenu = false }) {
+                FONT_SIZES.forEach { sz ->
+                    DropdownMenuItem(text = { Text("$sz") }, onClick = { onChange(RichTextOps.setSize(value, sz)); sizeMenu = false })
+                }
+            }
+        }
         ToolDivider()
-        ToolButton(Icons.Default.Remove, "تصغير") { onChange(RichTextOps.setSize(value, cur.sizeSp - 2)) }
-        Text("${cur.sizeSp}", style = MaterialTheme.typography.labelLarge)
-        ToolButton(Icons.Default.Add, "تكبير") { onChange(RichTextOps.setSize(value, cur.sizeSp + 2)) }
+
+        // لون النص (قائمة)
+        Box {
+            IconButton(onClick = { colorMenu = true }) {
+                Icon(Icons.Default.FormatColorText, "لون النص", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            DropdownMenu(expanded = colorMenu, onDismissRequest = { colorMenu = false }) {
+                Row(Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                    SWATCHES.forEach { argb ->
+                        ColorSwatch(Color(argb)) { onChange(RichTextOps.setColor(value, argb)); colorMenu = false }
+                    }
+                }
+            }
+        }
         ToolDivider()
-        SWATCHES.forEach { argb -> ColorSwatch(Color(argb)) { onChange(RichTextOps.setColor(value, argb)) } }
+
+        // المحاذاة (قائمة واحدة)
+        Box {
+            IconButton(onClick = { alignMenu = true }) {
+                Icon(alignIcon(curAlign), "المحاذاة", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            DropdownMenu(expanded = alignMenu, onDismissRequest = { alignMenu = false }) {
+                MenuChoice("تلقائي حسب اللغة", Icons.Default.Language, curAlign == TextAlign.Start) { onChange(RichTextOps.setAlign(value, TextAlign.Start)); alignMenu = false }
+                MenuChoice("يمين", Icons.AutoMirrored.Filled.FormatAlignRight, curAlign == TextAlign.Right) { onChange(RichTextOps.setAlign(value, TextAlign.Right)); alignMenu = false }
+                MenuChoice("توسيط", Icons.Default.FormatAlignCenter, curAlign == TextAlign.Center) { onChange(RichTextOps.setAlign(value, TextAlign.Center)); alignMenu = false }
+                MenuChoice("يسار", Icons.AutoMirrored.Filled.FormatAlignLeft, curAlign == TextAlign.Left) { onChange(RichTextOps.setAlign(value, TextAlign.Left)); alignMenu = false }
+                MenuChoice("ضبط", Icons.Default.FormatAlignJustify, curAlign == TextAlign.Justify) { onChange(RichTextOps.setAlign(value, TextAlign.Justify)); alignMenu = false }
+            }
+        }
+
+        // اتجاه الأسطر RTL/LTR (قائمة واحدة) — للفقرات فقط
+        Box {
+            IconButton(onClick = { dirMenu = true }) {
+                Icon(dirIcon(curDir), "اتجاه الأسطر", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            DropdownMenu(expanded = dirMenu, onDismissRequest = { dirMenu = false }) {
+                MenuChoice("تلقائي", Icons.Default.Language, curDir == TextDirection.Content) { onChange(RichTextOps.setDirection(value, TextDirection.Content)); dirMenu = false }
+                MenuChoice("عربي ← (RTL)", Icons.AutoMirrored.Filled.FormatTextdirectionRToL, curDir == TextDirection.Rtl) { onChange(RichTextOps.setDirection(value, TextDirection.Rtl)); dirMenu = false }
+                MenuChoice("لاتيني → (LTR)", Icons.AutoMirrored.Filled.FormatTextdirectionLToR, curDir == TextDirection.Ltr) { onChange(RichTextOps.setDirection(value, TextDirection.Ltr)); dirMenu = false }
+            }
+        }
         ToolDivider()
-        ToolButton(Icons.Default.FormatColorFill, "تظليل") { onChange(RichTextOps.setHighlight(value, 0xFFFFEB3B.toInt())) }
-        ToolButton(Icons.Default.FormatColorReset, "إزالة التظليل") { onChange(RichTextOps.setHighlight(value, 0)) }
+
+        // المزيد (تظليل / يتوسطه خط)
+        Box {
+            IconButton(onClick = { moreMenu = true }) {
+                Icon(Icons.Default.MoreHoriz, "المزيد", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            DropdownMenu(expanded = moreMenu, onDismissRequest = { moreMenu = false }) {
+                MenuChoice("يتوسطه خط", Icons.Default.StrikethroughS, cur.strike) { onChange(RichTextOps.toggleStrike(value)); moreMenu = false }
+                MenuChoice("تظليل أصفر", Icons.Default.FormatColorFill, cur.highlightArgb != 0) { onChange(RichTextOps.setHighlight(value, 0xFFFFEB3B.toInt())); moreMenu = false }
+                MenuChoice("إزالة التظليل", Icons.Default.FormatColorReset, false) { onChange(RichTextOps.setHighlight(value, 0)); moreMenu = false }
+            }
+        }
     }
+}
+
+private fun alignIcon(a: TextAlign) = when (a) {
+    TextAlign.Center -> Icons.Default.FormatAlignCenter
+    TextAlign.Left -> Icons.AutoMirrored.Filled.FormatAlignLeft
+    TextAlign.Right -> Icons.AutoMirrored.Filled.FormatAlignRight
+    TextAlign.Justify -> Icons.Default.FormatAlignJustify
+    else -> Icons.Default.Language
+}
+
+private fun dirIcon(d: TextDirection) = when (d) {
+    TextDirection.Rtl -> Icons.AutoMirrored.Filled.FormatTextdirectionRToL
+    TextDirection.Ltr -> Icons.AutoMirrored.Filled.FormatTextdirectionLToR
+    else -> Icons.Default.Language
+}
+
+@Composable
+private fun MenuChoice(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    active: Boolean,
+    onClick: () -> Unit,
+) {
+    DropdownMenuItem(
+        text = { Text(label) },
+        leadingIcon = {
+            Icon(icon, null, tint = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+        },
+        trailingIcon = { if (active) Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary) },
+        onClick = onClick,
+    )
 }
 
 @Composable
 private fun ToolToggle(icon: androidx.compose.ui.graphics.vector.ImageVector, desc: String, active: Boolean, onClick: () -> Unit) {
     val tint = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
     IconButton(onClick = onClick) { Icon(icon, contentDescription = desc, tint = tint) }
-}
-
-@Composable
-private fun ToolButton(icon: androidx.compose.ui.graphics.vector.ImageVector, desc: String, onClick: () -> Unit) {
-    IconButton(onClick = onClick) { Icon(icon, contentDescription = desc, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
 }
 
 @Composable

@@ -18,12 +18,14 @@ import android.text.style.StyleSpan
 import android.text.style.UnderlineSpan
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDirection
 import com.toffice.app.feature.editor.model.CharAttrs
 import com.toffice.app.feature.editor.model.DEFAULT_FONT_SP
 import com.toffice.app.feature.editor.model.PageSettings
 import com.toffice.app.feature.editor.model.paragraphSpans
 import com.toffice.app.feature.editor.model.toAligns
 import com.toffice.app.feature.editor.model.toCharAttrs
+import com.toffice.app.feature.editor.model.toDirections
 import java.io.OutputStream
 
 /** يصدّر المستند إلى PDF مع المحافظة على التنسيق والهوامش والترويسة/التذييل وترقيم الصفحات. */
@@ -138,10 +140,15 @@ object PdfExporter {
         }
 
         val aligns = annotated.toAligns()
+        val directions = annotated.toDirections()
         val paras = paragraphSpans(text)
         paras.forEachIndexed { idx, (s, e) ->
             if (e > s) {
-                val rtl = isRtl(text.substring(s, e))
+                val rtl = when (directions.getOrElse(idx) { TextDirection.Content }) {
+                    TextDirection.Rtl -> true
+                    TextDirection.Ltr -> false
+                    else -> isRtl(text.substring(s, e))
+                }
                 val al = androidAlign(aligns.getOrElse(idx) { TextAlign.Start }, rtl)
                 sb.setSpan(AlignmentSpan.Standard(al), s, e, Spanned.SPAN_PARAGRAPH)
             }

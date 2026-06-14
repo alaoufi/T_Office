@@ -2,6 +2,7 @@ package com.toffice.app.feature.editor.io
 
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDirection
 import com.toffice.app.feature.editor.model.CharAttrs
 import com.toffice.app.feature.editor.model.COLOR_DEFAULT
 import com.toffice.app.feature.editor.model.DEFAULT_FONT_SP
@@ -63,10 +64,12 @@ object DocxReader {
         val text = StringBuilder()
         val attrs = mutableListOf<CharAttrs>()
         val aligns = mutableListOf<TextAlign>()
+        val directions = mutableListOf<TextDirection>()
         var page = PageSettings()
 
         var firstParagraph = true
-        var curAlign = TextAlign.Right
+        var curAlign = TextAlign.Start
+        var curDir = TextDirection.Content
         var inT = false
 
         var rb = false; var ri = false; var ru = false; var rst = false
@@ -87,7 +90,9 @@ object DocxReader {
                         if (!firstParagraph) { text.append('\n'); attrs.add(CharAttrs()) }
                         firstParagraph = false
                         curAlign = TextAlign.Start
+                        curDir = TextDirection.Content
                     }
+                    "bidi" -> curDir = TextDirection.Rtl
                     "jc" -> curAlign = mapAlign(attr(parser, "val"))
                     "r" -> { rb = false; ri = false; ru = false; rst = false; rsz = DEFAULT_FONT_SP; rc = COLOR_DEFAULT; rhl = COLOR_DEFAULT }
                     "b" -> rb = boolOn(attr(parser, "val"))
@@ -121,13 +126,13 @@ object DocxReader {
                 XmlPullParser.TEXT -> if (inT) appendText(parser.text ?: "")
                 XmlPullParser.END_TAG -> when (local(parser.name)) {
                     "t" -> inT = false
-                    "p" -> aligns.add(curAlign)
+                    "p" -> { aligns.add(curAlign); directions.add(curDir) }
                 }
             }
             event = parser.next()
         }
 
-        return buildAnnotated(text.toString(), attrs, aligns) to page
+        return buildAnnotated(text.toString(), attrs, aligns, directions) to page
     }
 
     /** استخراج نص بسيط من ترويسة/تذييل (الفقرات مفصولة بسطر جديد). */

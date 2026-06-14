@@ -2,6 +2,7 @@ package com.toffice.app.feature.editor.model
 
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDirection
 
 /** عمليات التنسيق على محتوى المحرر (تعمل على التحديد الحالي). */
 object RichTextOps {
@@ -12,18 +13,22 @@ object RichTextOps {
         return s to e
     }
 
-    private fun rebuild(v: TextFieldValue, mutate: (MutableList<CharAttrs>, MutableList<TextAlign>) -> Unit): TextFieldValue {
+    private fun rebuild(
+        v: TextFieldValue,
+        mutate: (MutableList<CharAttrs>, MutableList<TextAlign>, MutableList<TextDirection>) -> Unit,
+    ): TextFieldValue {
         val a = v.annotatedString
         val attrs = a.toCharAttrs()
         val aligns = a.toAligns()
-        mutate(attrs, aligns)
-        return v.copy(annotatedString = buildAnnotated(a.text, attrs, aligns))
+        val dirs = a.toDirections()
+        mutate(attrs, aligns, dirs)
+        return v.copy(annotatedString = buildAnnotated(a.text, attrs, aligns, dirs))
     }
 
     fun toggleBold(v: TextFieldValue): TextFieldValue {
         val (s, e) = bounds(v)
         if (s >= e) return v
-        return rebuild(v) { attrs, _ ->
+        return rebuild(v) { attrs, _, _ ->
             val all = (s until e).all { attrs[it].bold }
             for (i in s until e) attrs[i] = attrs[i].copy(bold = !all)
         }
@@ -32,7 +37,7 @@ object RichTextOps {
     fun toggleItalic(v: TextFieldValue): TextFieldValue {
         val (s, e) = bounds(v)
         if (s >= e) return v
-        return rebuild(v) { attrs, _ ->
+        return rebuild(v) { attrs, _, _ ->
             val all = (s until e).all { attrs[it].italic }
             for (i in s until e) attrs[i] = attrs[i].copy(italic = !all)
         }
@@ -41,7 +46,7 @@ object RichTextOps {
     fun toggleUnderline(v: TextFieldValue): TextFieldValue {
         val (s, e) = bounds(v)
         if (s >= e) return v
-        return rebuild(v) { attrs, _ ->
+        return rebuild(v) { attrs, _, _ ->
             val all = (s until e).all { attrs[it].underline }
             for (i in s until e) attrs[i] = attrs[i].copy(underline = !all)
         }
@@ -50,7 +55,7 @@ object RichTextOps {
     fun toggleStrike(v: TextFieldValue): TextFieldValue {
         val (s, e) = bounds(v)
         if (s >= e) return v
-        return rebuild(v) { attrs, _ ->
+        return rebuild(v) { attrs, _, _ ->
             val all = (s until e).all { attrs[it].strike }
             for (i in s until e) attrs[i] = attrs[i].copy(strike = !all)
         }
@@ -59,7 +64,7 @@ object RichTextOps {
     fun setHighlight(v: TextFieldValue, colorArgb: Int): TextFieldValue {
         val (s, e) = bounds(v)
         if (s >= e) return v
-        return rebuild(v) { attrs, _ ->
+        return rebuild(v) { attrs, _, _ ->
             for (i in s until e) attrs[i] = attrs[i].copy(highlightArgb = colorArgb)
         }
     }
@@ -67,7 +72,7 @@ object RichTextOps {
     fun setSize(v: TextFieldValue, sizeSp: Int): TextFieldValue {
         val (s, e) = bounds(v)
         if (s >= e) return v
-        return rebuild(v) { attrs, _ ->
+        return rebuild(v) { attrs, _, _ ->
             for (i in s until e) attrs[i] = attrs[i].copy(sizeSp = sizeSp.coerceIn(8, 96))
         }
     }
@@ -75,28 +80,63 @@ object RichTextOps {
     fun setColor(v: TextFieldValue, colorArgb: Int): TextFieldValue {
         val (s, e) = bounds(v)
         if (s >= e) return v
-        return rebuild(v) { attrs, _ ->
+        return rebuild(v) { attrs, _, _ ->
             for (i in s until e) attrs[i] = attrs[i].copy(colorArgb = colorArgb)
         }
     }
 
     fun setAlign(v: TextFieldValue, align: TextAlign): TextFieldValue {
         val (s, e) = bounds(v)
-        return rebuild(v) { _, aligns ->
-            val paras = paragraphSpans(v.annotatedString.text)
-            paras.forEachIndexed { idx, (ps, pe) ->
-                val intersects = if (s == e) (ps <= s && s <= pe) else (ps <= e && pe >= s)
-                if (intersects && idx < aligns.size) aligns[idx] = align
+        return rebuild(v) { _, aligns, _ ->
+            forEachSelectedParagraph(v.annotatedString.text, s, e) { idx ->
+                if (idx < aligns.size) aligns[idx] = align
             }
         }
     }
 
-    /** يقرأ حالة التنسيق عند التحديد لإبراز أزرار شريط الأدوات. */
+    /** يضبط اتجاه الفقرة (للأسطر فقط): RTL / LTR / تلقائي. */
+    fun setDirection(v: TextFieldValue, direction: TextDirection): TextFieldValue {
+        val (s, e) = bounds(v)
+        return rebuild(v) { _, _, dirs ->
+            forEachSelectedParagraph(v.annotatedString.text, s, e) { idx ->
+                if (idx < dirs.size) dirs[idx] = direction
+            }
+        }
+    }
+
+    private inline fun forEachSelectedParagraph(text: String, s: Int, e: Int, action: (Int) -> Unit) {
+        val paras = paragraphSpans(text)
+        paras.forEachIndexed { idx, (ps, pe) ->
+            val intersects = if (s == e) (ps <= s && s <= pe) else (ps <= e && pe >= s)
+            if (intersects) action(idx)
+        }
+    }
+
+    /** يقرأ حالة تنسيق الحرف عند التحديد لإبراز الأزرار. */
     fun currentAttrs(v: TextFieldValue): CharAttrs {
         val (s, e) = bounds(v)
         val attrs = v.annotatedString.toCharAttrs()
         if (attrs.isEmpty()) return CharAttrs()
         val idx = (if (s >= e) (s - 1).coerceAtLeast(0) else s).coerceIn(0, attrs.size - 1)
         return attrs[idx]
+    }
+
+    /** محاذاة الفقرة الحالية. */
+    fun currentAlign(v: TextFieldValue): TextAlign {
+        val idx = paragraphIndexAt(v)
+        return v.annotatedString.toAligns().getOrElse(idx) { TextAlign.Start }
+    }
+
+    /** اتجاه الفقرة الحالية. */
+    fun currentDirection(v: TextFieldValue): TextDirection {
+        val idx = paragraphIndexAt(v)
+        return v.annotatedString.toDirections().getOrElse(idx) { TextDirection.Content }
+    }
+
+    private fun paragraphIndexAt(v: TextFieldValue): Int {
+        val pos = minOf(v.selection.start, v.selection.end)
+        val paras = paragraphSpans(v.annotatedString.text)
+        paras.forEachIndexed { idx, (ps, pe) -> if (ps <= pos && pos <= pe) return idx }
+        return 0
     }
 }

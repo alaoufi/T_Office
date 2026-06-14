@@ -70,6 +70,21 @@ fun Int.toTextAlign(): TextAlign = when (this) {
     else -> TextAlign.Start // تلقائي
 }
 
+// ---- اتجاه الفقرة (للأسطر فقط، منفصل عن اتجاه الصفحة) ----
+// 0 = تلقائي (حسب اللغة)، 1 = RTL، 2 = LTR
+
+fun Int.toTextDirection(): TextDirection = when (this) {
+    1 -> TextDirection.Rtl
+    2 -> TextDirection.Ltr
+    else -> TextDirection.Content // تلقائي
+}
+
+fun TextDirection.toDirCode(): Int = when (this) {
+    TextDirection.Rtl -> 1
+    TextDirection.Ltr -> 2
+    else -> 0
+}
+
 /** حدود الفقرات (بداية، نهاية) مقسّمة على '\n'. */
 fun paragraphSpans(text: String): List<Pair<Int, Int>> {
     val spans = mutableListOf<Pair<Int, Int>>()
@@ -115,19 +130,28 @@ fun AnnotatedString.toAligns(): MutableList<TextAlign> {
     }.toMutableList()
 }
 
-/** يبني نصاً منسّقاً من النص + الخصائص + المحاذاة. */
+/** يستخرج اتجاه كل فقرة (الافتراضي تلقائي = Content). */
+fun AnnotatedString.toDirections(): MutableList<TextDirection> {
+    val paras = paragraphSpans(text)
+    return paras.map { (s, _) ->
+        paragraphStyles.firstOrNull { it.start == s }?.item?.textDirection ?: TextDirection.Content
+    }.toMutableList()
+}
+
+/** يبني نصاً منسّقاً من النص + الخصائص + المحاذاة + اتجاه الفقرات. */
 fun buildAnnotated(
     text: String,
     attrs: List<CharAttrs>,
     aligns: List<TextAlign>,
+    directions: List<TextDirection> = emptyList(),
 ): AnnotatedString = buildAnnotatedString {
     append(text)
     val paras = paragraphSpans(text)
     paras.forEachIndexed { idx, (s, e) ->
         if (e > s) {
             val al = aligns.getOrElse(idx) { TextAlign.Start }
-            // textDirection = Content يجعل اتجاه الفقرة يتبع لغتها تلقائياً
-            addStyle(ParagraphStyle(textAlign = al, textDirection = TextDirection.Content), s, e)
+            val dir = directions.getOrElse(idx) { TextDirection.Content }
+            addStyle(ParagraphStyle(textAlign = al, textDirection = dir), s, e)
         }
     }
     var i = 0
@@ -163,10 +187,13 @@ fun annotatedToJson(a: AnnotatedString): String {
     }
     val alignsArr = JSONArray()
     aligns.forEach { alignsArr.put(it.toCode()) }
+    val dirsArr = JSONArray()
+    a.toDirections().forEach { dirsArr.put(it.toDirCode()) }
     return JSONObject()
         .put("text", a.text)
         .put("runs", runs)
         .put("aligns", alignsArr)
+        .put("dirs", dirsArr)
         .toString()
 }
 
@@ -193,11 +220,16 @@ fun jsonToAnnotated(json: String): AnnotatedString {
     }
     val alignsArr = obj.optJSONArray("aligns") ?: JSONArray()
     val paras = paragraphSpans(text)
-    val aligns = MutableList(paras.size) { TextAlign.Right }
+    val aligns = MutableList(paras.size) { TextAlign.Start }
     for (k in 0 until minOf(alignsArr.length(), aligns.size)) {
         aligns[k] = alignsArr.getInt(k).toTextAlign()
     }
-    return buildAnnotated(text, attrs, aligns)
+    val dirsArr = obj.optJSONArray("dirs") ?: JSONArray()
+    val directions = MutableList(paras.size) { TextDirection.Content }
+    for (k in 0 until minOf(dirsArr.length(), directions.size)) {
+        directions[k] = dirsArr.getInt(k).toTextDirection()
+    }
+    return buildAnnotated(text, attrs, aligns, directions)
 }
 
 // ---- التحويل إلى فقرات للتصدير (DOCX / PDF) ----
@@ -213,11 +245,12 @@ data class RunOut(
     val highlightArgb: Int,
 )
 
-data class ParaOut(val alignCode: Int, val runs: List<RunOut>)
+data class ParaOut(val alignCode: Int, val dirCode: Int, val runs: List<RunOut>)
 
 fun AnnotatedString.toParagraphsOut(): List<ParaOut> {
     val attrs = toCharAttrs()
     val aligns = toAligns()
+    val directions = toDirections()
     val result = mutableListOf<ParaOut>()
     val paras = paragraphSpans(text)
     paras.forEachIndexed { idx, (s, eRaw) ->
@@ -232,7 +265,13 @@ fun AnnotatedString.toParagraphsOut(): List<ParaOut> {
             runs.add(RunOut(text.substring(i, j), a.bold, a.italic, a.underline, a.strike, a.sizeSp, a.colorArgb, a.highlightArgb))
             i = j
         }
-        result.add(ParaOut(aligns.getOrElse(idx) { TextAlign.Start }.toCode(), runs))
+        result.add(
+            ParaOut(
+                aligns.getOrElse(idx) { TextAlign.Start }.toCode(),
+                directions.getOrElse(idx) { TextDirection.Content }.toDirCode(),
+                runs,
+            )
+        )
     }
     return result
 }
