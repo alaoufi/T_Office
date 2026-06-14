@@ -135,6 +135,14 @@ object RichTextOps {
         }
     }
 
+    fun setFontFamily(v: TextFieldValue, code: Int): TextFieldValue {
+        val (s, e) = bounds(v)
+        if (s >= e) return v
+        return rebuild(v) { attrs, _, _ ->
+            for (i in s until e) attrs[i] = attrs[i].copy(fontFamily = code)
+        }
+    }
+
     fun setAlign(v: TextFieldValue, align: TextAlign): TextFieldValue {
         val (s, e) = bounds(v)
         return rebuild(v) { _, aligns, _ ->

@@ -149,6 +149,11 @@ object DocxWriter {
     private fun run(r: RunOut, rtl: Boolean): String {
         val sb = StringBuilder()
         sb.append("<w:r><w:rPr>")
+        if (r.fontFamily != com.toffice.app.feature.editor.model.FONT_DEFAULT) {
+            val name = com.toffice.app.feature.editor.model.fontNameOf(r.fontFamily)
+            sb.append("<w:rFonts w:ascii=\"").append(name).append("\" w:hAnsi=\"").append(name)
+                .append("\" w:cs=\"").append(name).append("\"/>")
+        }
         if (r.bold) sb.append("<w:b/><w:bCs/>")
         if (r.italic) sb.append("<w:i/><w:iCs/>")
         if (r.underline) sb.append("<w:u w:val=\"single\"/>")

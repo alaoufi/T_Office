@@ -6,6 +6,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.ParagraphStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -28,6 +29,41 @@ const val COLOR_DEFAULT = 0
 /** مقدار المسافة البادئة لكل مستوى (نقطة ≈ ٠٫٥ بوصة كما في وورد). */
 const val INDENT_STEP_PT = 36
 
+/** عائلات الخطوط المتاحة (0 = الافتراضي). */
+const val FONT_DEFAULT = 0
+const val FONT_SERIF = 1
+const val FONT_SANS = 2
+const val FONT_MONO = 3
+
+val FONT_FAMILY_NAMES = mapOf(
+    FONT_DEFAULT to "افتراضي",
+    FONT_SERIF to "نسخ (Serif)",
+    FONT_SANS to "Sans",
+    FONT_MONO to "أحادي",
+)
+
+fun fontFamilyOf(code: Int): FontFamily? = when (code) {
+    FONT_SERIF -> FontFamily.Serif
+    FONT_SANS -> FontFamily.SansSerif
+    FONT_MONO -> FontFamily.Monospace
+    else -> null
+}
+
+fun codeOfFontFamily(ff: FontFamily?): Int = when (ff) {
+    FontFamily.Serif -> FONT_SERIF
+    FontFamily.SansSerif -> FONT_SANS
+    FontFamily.Monospace -> FONT_MONO
+    else -> FONT_DEFAULT
+}
+
+/** اسم الخط المقابل في DOCX/Android لكل عائلة. */
+fun fontNameOf(code: Int): String = when (code) {
+    FONT_SERIF -> "serif"
+    FONT_SANS -> "sans-serif"
+    FONT_MONO -> "monospace"
+    else -> "sans-serif"
+}
+
 /** خصائص تنسيق حرف واحد. */
 data class CharAttrs(
     val bold: Boolean = false,
@@ -37,10 +73,12 @@ data class CharAttrs(
     val sizeSp: Int = DEFAULT_FONT_SP,
     val colorArgb: Int = COLOR_DEFAULT,
     val highlightArgb: Int = COLOR_DEFAULT,
+    val fontFamily: Int = FONT_DEFAULT,
 ) {
     fun isDefault(): Boolean =
         !bold && !italic && !underline && !strike &&
-            sizeSp == DEFAULT_FONT_SP && colorArgb == COLOR_DEFAULT && highlightArgb == COLOR_DEFAULT
+            sizeSp == DEFAULT_FONT_SP && colorArgb == COLOR_DEFAULT && highlightArgb == COLOR_DEFAULT &&
+            fontFamily == FONT_DEFAULT
 
     fun toSpanStyle(): SpanStyle {
         val decos = mutableListOf<TextDecoration>()
@@ -49,6 +87,7 @@ data class CharAttrs(
         return SpanStyle(
             fontWeight = if (bold) FontWeight.Bold else null,
             fontStyle = if (italic) FontStyle.Italic else null,
+            fontFamily = fontFamilyOf(fontFamily),
             textDecoration = if (decos.isEmpty()) null else TextDecoration.combine(decos),
             fontSize = sizeSp.sp,
             color = if (colorArgb != COLOR_DEFAULT) Color(colorArgb) else Color.Unspecified,
@@ -122,6 +161,7 @@ fun AnnotatedString.toCharAttrs(): MutableList<CharAttrs> {
             if (s.fontSize != TextUnit.Unspecified) a = a.copy(sizeSp = s.fontSize.value.toInt())
             if (s.color != Color.Unspecified) a = a.copy(colorArgb = s.color.toArgb())
             if (s.background != Color.Unspecified) a = a.copy(highlightArgb = s.background.toArgb())
+            if (s.fontFamily != null) a = a.copy(fontFamily = codeOfFontFamily(s.fontFamily))
             attrs[i] = a
         }
     }
@@ -221,6 +261,7 @@ fun annotatedToJson(a: AnnotatedString): String {
                     .put("s", i).put("e", j)
                     .put("b", at.bold).put("i", at.italic).put("u", at.underline).put("st", at.strike)
                     .put("sz", at.sizeSp).put("c", at.colorArgb).put("hl", at.highlightArgb)
+                    .put("ff", at.fontFamily)
             )
         }
         i = j
@@ -261,6 +302,7 @@ fun jsonToAnnotated(json: String): AnnotatedString {
             sizeSp = r.optInt("sz", DEFAULT_FONT_SP),
             colorArgb = r.optInt("c", COLOR_DEFAULT),
             highlightArgb = r.optInt("hl", COLOR_DEFAULT),
+            fontFamily = r.optInt("ff", FONT_DEFAULT),
         )
         for (idx in s until e) attrs[idx] = a
     }
@@ -299,6 +341,7 @@ data class RunOut(
     val sizeSp: Int,
     val colorArgb: Int,
     val highlightArgb: Int,
+    val fontFamily: Int = FONT_DEFAULT,
 )
 
 data class ParaOut(
@@ -326,7 +369,7 @@ fun AnnotatedString.toParagraphsOut(): List<ParaOut> {
             val a = attrs[i]
             var j = i + 1
             while (j < e && attrs[j] == a) j++
-            runs.add(RunOut(text.substring(i, j), a.bold, a.italic, a.underline, a.strike, a.sizeSp, a.colorArgb, a.highlightArgb))
+            runs.add(RunOut(text.substring(i, j), a.bold, a.italic, a.underline, a.strike, a.sizeSp, a.colorArgb, a.highlightArgb, a.fontFamily))
             i = j
         }
         result.add(

@@ -45,6 +45,8 @@ import androidx.compose.material.icons.filled.FormatAlignJustify
 import androidx.compose.material.icons.filled.FormatBold
 import androidx.compose.material.icons.filled.FormatColorFill
 import androidx.compose.material.icons.filled.FormatColorReset
+import androidx.compose.material.icons.filled.FontDownload
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FormatColorText
 import androidx.compose.material.icons.filled.FormatItalic
 import androidx.compose.material.icons.filled.FormatLineSpacing
@@ -63,6 +65,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalTextStyle
@@ -106,6 +109,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.toffice.app.feature.editor.model.DocBundle
 import com.toffice.app.feature.editor.model.DocSerializer
+import com.toffice.app.feature.editor.model.FONT_FAMILY_NAMES
 import com.toffice.app.feature.editor.model.PAGE_SIZES
 import com.toffice.app.feature.editor.model.PageSettings
 import com.toffice.app.feature.editor.model.RichTextOps
@@ -251,31 +255,45 @@ fun EditorScreen(
                     IconButton(onClick = { redo() }, enabled = redoStack.isNotEmpty()) {
                         Icon(Icons.AutoMirrored.Filled.Redo, contentDescription = "إعادة")
                     }
-                    IconButton(onClick = { persist() }) { Icon(Icons.Default.Save, contentDescription = "حفظ") }
-                    IconButton(onClick = { showMenu = true }) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "المزيد")
-                    }
-                    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                        DropdownMenuItem(
-                            text = { Text("إعداد الصفحة") },
-                            leadingIcon = { Icon(Icons.Default.AspectRatio, null) },
-                            onClick = { showMenu = false; showPageSetup = true },
-                        )
-                        DropdownMenuItem(
-                            text = { Text(if (page.showPageNumber) "إخفاء ترقيم الصفحات" else "إظهار ترقيم الصفحات") },
-                            leadingIcon = { Icon(Icons.Default.Numbers, null) },
-                            onClick = { page = page.copy(showPageNumber = !page.showPageNumber); showMenu = false },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("تصدير Word (DOCX)") },
-                            leadingIcon = { Icon(Icons.Default.Upload, null) },
-                            onClick = { showMenu = false; exportLauncher.launch("${title.ifBlank { "مستند" }}.docx") },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("تصدير PDF") },
-                            leadingIcon = { Icon(Icons.Default.PictureAsPdf, null) },
-                            onClick = { showMenu = false; pdfLauncher.launch("${title.ifBlank { "مستند" }}.pdf") },
-                        )
+                    // قائمة «ملف» وأدواتها
+                    Box {
+                        Row(
+                            Modifier.clickable { showMenu = true }.padding(horizontal = 10.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.Default.Folder, contentDescription = null)
+                            Text(" ملف", style = MaterialTheme.typography.labelLarge)
+                            Icon(Icons.Default.ArrowDropDown, null)
+                        }
+                        DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                            DropdownMenuItem(
+                                text = { Text("حفظ") },
+                                leadingIcon = { Icon(Icons.Default.Save, null) },
+                                onClick = { showMenu = false; persist() },
+                            )
+                            HorizontalDivider()
+                            DropdownMenuItem(
+                                text = { Text("إعداد الصفحة") },
+                                leadingIcon = { Icon(Icons.Default.AspectRatio, null) },
+                                onClick = { showMenu = false; showPageSetup = true },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(if (page.showPageNumber) "إخفاء ترقيم الصفحات" else "إظهار ترقيم الصفحات") },
+                                leadingIcon = { Icon(Icons.Default.Numbers, null) },
+                                onClick = { page = page.copy(showPageNumber = !page.showPageNumber); showMenu = false },
+                            )
+                            HorizontalDivider()
+                            DropdownMenuItem(
+                                text = { Text("تصدير Word (DOCX)") },
+                                leadingIcon = { Icon(Icons.Default.Upload, null) },
+                                onClick = { showMenu = false; exportLauncher.launch("${title.ifBlank { "مستند" }}.docx") },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("تصدير PDF") },
+                                leadingIcon = { Icon(Icons.Default.PictureAsPdf, null) },
+                                onClick = { showMenu = false; pdfLauncher.launch("${title.ifBlank { "مستند" }}.pdf") },
+                            )
+                        }
                     }
                 },
             )
@@ -580,6 +598,7 @@ private fun FormatToolbar(value: TextFieldValue, onChange: (TextFieldValue) -> U
     val curDir = RichTextOps.currentDirection(value)
     val curSpacing = RichTextOps.currentLineSpacing(value)
 
+    var fontMenu by remember { mutableStateOf(false) }
     var sizeMenu by remember { mutableStateOf(false) }
     var colorMenu by remember { mutableStateOf(false) }
     var alignMenu by remember { mutableStateOf(false) }
@@ -597,6 +616,26 @@ private fun FormatToolbar(value: TextFieldValue, onChange: (TextFieldValue) -> U
         ToolToggle(Icons.Default.FormatBold, "غامق", cur.bold) { onChange(RichTextOps.toggleBold(value)) }
         ToolToggle(Icons.Default.FormatItalic, "مائل", cur.italic) { onChange(RichTextOps.toggleItalic(value)) }
         ToolToggle(Icons.Default.FormatUnderlined, "تسطير", cur.underline) { onChange(RichTextOps.toggleUnderline(value)) }
+        ToolDivider()
+
+        // عائلة الخط (قائمة)
+        Box {
+            Row(
+                Modifier.clickable { fontMenu = true }.padding(horizontal = 6.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Default.FontDownload, "الخط", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(" ${FONT_FAMILY_NAMES[cur.fontFamily] ?: "افتراضي"} ", style = MaterialTheme.typography.labelLarge)
+                Icon(Icons.Default.ArrowDropDown, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            DropdownMenu(expanded = fontMenu, onDismissRequest = { fontMenu = false }) {
+                FONT_FAMILY_NAMES.forEach { (code, name) ->
+                    MenuChoice(name, Icons.Default.FontDownload, cur.fontFamily == code) {
+                        onChange(RichTextOps.setFontFamily(value, code)); fontMenu = false
+                    }
+                }
+            }
+        }
         ToolDivider()
 
         // حجم الخط (قائمة)
@@ -710,7 +749,7 @@ private fun alignIcon(a: TextAlign) = when (a) {
     TextAlign.Left -> Icons.AutoMirrored.Filled.FormatAlignLeft
     TextAlign.Right -> Icons.AutoMirrored.Filled.FormatAlignRight
     TextAlign.Justify -> Icons.Default.FormatAlignJustify
-    else -> Icons.Default.Language
+    else -> Icons.AutoMirrored.Filled.FormatAlignRight // تلقائي (أيقونة محاذاة لا كرة أرضية)
 }
 
 private fun dirIcon(d: TextDirection) = when (d) {
