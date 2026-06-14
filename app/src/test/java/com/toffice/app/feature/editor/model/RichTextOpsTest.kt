@@ -195,6 +195,47 @@ class RichTextOpsTest {
         assertEquals(TextDirection.Rtl, bolded.annotatedString.toDirections()[0])
     }
 
+    // ---- البحث والاستبدال ----
+
+    @Test
+    fun findRanges_findsAll() {
+        val r = RichTextOps.findRanges("اب اب اب", "اب")
+        assertEquals(3, r.size)
+        assertEquals(0, r[0].first)
+    }
+
+    @Test
+    fun replaceAll_replacesAndCounts() {
+        val (nv, count) = RichTextOps.replaceAll(tfv("قطة قطة"), "قطة", "كلب")
+        assertEquals("كلب كلب", nv.annotatedString.text)
+        assertEquals(2, count)
+    }
+
+    @Test
+    fun replaceAll_noMatch_zero() {
+        val (nv, count) = RichTextOps.replaceAll(tfv("نص"), "xyz", "abc")
+        assertEquals("نص", nv.annotatedString.text)
+        assertEquals(0, count)
+    }
+
+    @Test
+    fun findNext_movesSelection() {
+        val v = tfv("اب جد اب", selStart = 0, selEnd = 0)
+        val r = RichTextOps.findNext(v, "اب")
+        assertEquals(0, r.selection.start)
+        assertEquals(2, r.selection.end)
+        val r2 = RichTextOps.findNext(r, "اب")
+        assertEquals(6, r2.selection.start)
+    }
+
+    @Test
+    fun replaceCurrent_replacesSelectedMatch() {
+        // التطابق الأول محدّد
+        val v = TextFieldValue(AnnotatedString("اب اب"), selection = TextRange(0, 2))
+        val r = RichTextOps.replaceCurrent(v, "اب", "جد")
+        assertEquals("جد اب", r.annotatedString.text)
+    }
+
     @Test
     fun newParagraphInheritsDirection() {
         // الفقرة الأولى RTL، ثم Enter ⇒ الفقرة الجديدة ترث RTL

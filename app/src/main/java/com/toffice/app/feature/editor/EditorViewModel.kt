@@ -148,6 +148,11 @@ class EditorViewModel @Inject constructor(
         }
     }
 
+    /** يعرض رسالة قصيرة للمستخدم. */
+    fun notify(msg: String) {
+        viewModelScope.launch { _events.emit(msg) }
+    }
+
     /** حفظ نصّ عادي (TXT) بترميز UTF-8. */
     fun exportText(uri: Uri, text: String) {
         viewModelScope.launch(Dispatchers.IO) {

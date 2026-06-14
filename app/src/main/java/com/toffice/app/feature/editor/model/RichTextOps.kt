@@ -153,6 +153,89 @@ object RichTextOps {
         }
     }
 
+    // ---- البحث والاستبدال ----
+
+    /** مواضع كل تطابقات النص (غير متداخلة). */
+    fun findRanges(text: String, query: String, caseSensitive: Boolean = false): List<IntRange> {
+        if (query.isEmpty()) return emptyList()
+        val result = mutableListOf<IntRange>()
+        var from = 0
+        while (true) {
+            val i = text.indexOf(query, from, ignoreCase = !caseSensitive)
+            if (i < 0) break
+            result.add(i until (i + query.length))
+            from = i + query.length
+        }
+        return result
+    }
+
+    /** ينقل التحديد إلى التطابق التالي بعد الموضع الحالي (مع الالتفاف). */
+    fun findNext(v: TextFieldValue, query: String, caseSensitive: Boolean = false): TextFieldValue {
+        val ranges = findRanges(v.annotatedString.text, query, caseSensitive)
+        if (ranges.isEmpty()) return v
+        val from = maxOf(v.selection.start, v.selection.end)
+        val next = ranges.firstOrNull { it.first >= from } ?: ranges.first()
+        return v.copy(selection = TextRange(next.first, next.last + 1))
+    }
+
+    private fun replaceRange(v: TextFieldValue, s: Int, e: Int, replacement: String): TextFieldValue {
+        val a = v.annotatedString
+        val attrs = a.toCharAttrs()
+        val aligns = a.toAligns()
+        val dirs = a.toDirections()
+        val ls = a.toLineSpacings()
+        val ind = a.toIndents()
+        val attrAt = attrs.getOrElse(s) { CharAttrs() }
+        val sb = StringBuilder(a.text)
+        sb.replace(s, e, replacement)
+        repeat(e - s) { if (s < attrs.size) attrs.removeAt(s) }
+        repeat(replacement.length) { attrs.add(s, attrAt) }
+        val txt = sb.toString()
+        return v.copy(
+            annotatedString = buildAnnotated(txt, attrs, aligns, dirs, ls, ind),
+            selection = TextRange((s + replacement.length).coerceIn(0, txt.length)),
+        )
+    }
+
+    /** يستبدل التطابق المحدّد حالياً (إن كان محدّداً) ثم ينتقل للتالي. */
+    fun replaceCurrent(v: TextFieldValue, query: String, replacement: String, caseSensitive: Boolean = false): TextFieldValue {
+        if (query.isEmpty()) return v
+        val s = minOf(v.selection.start, v.selection.end)
+        val e = maxOf(v.selection.start, v.selection.end)
+        val selText = if (e > s) v.annotatedString.text.substring(s, e) else ""
+        return if (e > s && selText.equals(query, ignoreCase = !caseSensitive)) {
+            val replaced = replaceRange(v, s, e, replacement)
+            findNext(replaced, query, caseSensitive)
+        } else {
+            findNext(v, query, caseSensitive)
+        }
+    }
+
+    /** يستبدل كل التطابقات. يعيد القيمة الجديدة وعدد الاستبدالات. */
+    fun replaceAll(v: TextFieldValue, query: String, replacement: String, caseSensitive: Boolean = false): Pair<TextFieldValue, Int> {
+        if (query.isEmpty()) return v to 0
+        val a = v.annotatedString
+        val ranges = findRanges(a.text, query, caseSensitive)
+        if (ranges.isEmpty()) return v to 0
+        val attrs = a.toCharAttrs()
+        val aligns = a.toAligns()
+        val dirs = a.toDirections()
+        val ls = a.toLineSpacings()
+        val ind = a.toIndents()
+        val sb = StringBuilder(a.text)
+        for (r in ranges.reversed()) {
+            val attrAt = attrs.getOrElse(r.first) { CharAttrs() }
+            sb.replace(r.first, r.last + 1, replacement)
+            repeat(r.last - r.first + 1) { if (r.first < attrs.size) attrs.removeAt(r.first) }
+            repeat(replacement.length) { attrs.add(r.first, attrAt) }
+        }
+        val txt = sb.toString()
+        return v.copy(
+            annotatedString = buildAnnotated(txt, attrs, aligns, dirs, ls, ind),
+            selection = TextRange(0),
+        ) to ranges.size
+    }
+
     fun setFontFamily(v: TextFieldValue, code: Int): TextFieldValue {
         val (s, e) = bounds(v)
         if (s >= e) return v

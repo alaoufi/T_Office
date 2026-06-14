@@ -43,6 +43,7 @@ import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FormatAlignCenter
 import androidx.compose.material.icons.filled.FormatAlignJustify
 import androidx.compose.material.icons.filled.FormatBold
@@ -65,6 +66,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Numbers
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.material.icons.filled.StrikethroughS
 import androidx.compose.material.icons.filled.TableChart
@@ -77,6 +79,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalTextStyle
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
@@ -84,6 +87,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
@@ -206,6 +210,9 @@ fun EditorScreen(
     var showSaveAs by remember { mutableStateOf(false) }
     var ribbonTab by remember { mutableStateOf(RibbonTab.Home) }
     var showRuler by remember { mutableStateOf(true) }
+    var showFindReplace by remember { mutableStateOf(false) }
+    var findQuery by remember { mutableStateOf("") }
+    var replaceQuery by remember { mutableStateOf("") }
 
     val openLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
@@ -309,12 +316,29 @@ fun EditorScreen(
                     showRuler = showRuler,
                     onToggleRuler = { showRuler = !showRuler },
                     onTogglePageNumber = { page = page.copy(showPageNumber = !page.showPageNumber) },
+                    onFindReplace = { showFindReplace = true; focusTarget = EditField.Body },
                     onOpen = { openLauncher.launch(arrayOf(MIME_DOCX, "application/msword", "*/*")) },
                     onSave = { persist() },
                     onSaveAs = { showSaveAs = true },
                     onExportPdf = { pdfLauncher.launch("${title.ifBlank { "مستند" }}.pdf") },
                     onPageSetup = { showPageSetup = true },
                 )
+                if (showFindReplace) {
+                    FindReplaceBar(
+                        find = findQuery,
+                        onFind = { findQuery = it },
+                        replace = replaceQuery,
+                        onReplace = { replaceQuery = it },
+                        onNext = { value = RichTextOps.findNext(value, findQuery) },
+                        onReplaceOne = { value = RichTextOps.replaceCurrent(value, findQuery, replaceQuery) },
+                        onReplaceAll = {
+                            val (nv, count) = RichTextOps.replaceAll(value, findQuery, replaceQuery)
+                            update(nv)
+                            viewModel.notify("تم استبدال $count")
+                        },
+                        onClose = { showFindReplace = false },
+                    )
+                }
             }
 
             if (showPageSetup) {
@@ -630,6 +654,46 @@ private fun SaveAsDialog(onDismiss: () -> Unit, onPick: (SaveFormat) -> Unit) {
     )
 }
 
+/** شريط البحث والاستبدال. */
+@Composable
+private fun FindReplaceBar(
+    find: String,
+    onFind: (String) -> Unit,
+    replace: String,
+    onReplace: (String) -> Unit,
+    onNext: () -> Unit,
+    onReplaceOne: () -> Unit,
+    onReplaceAll: () -> Unit,
+    onClose: () -> Unit,
+) {
+    Surface(tonalElevation = 2.dp, color = MaterialTheme.colorScheme.surfaceVariant) {
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            OutlinedTextField(
+                value = find,
+                onValueChange = onFind,
+                placeholder = { Text("بحث") },
+                singleLine = true,
+                modifier = Modifier.width(170.dp),
+            )
+            IconButton(onClick = onNext) { Icon(Icons.Default.Search, contentDescription = "التالي") }
+            Spacer(Modifier.width(8.dp))
+            OutlinedTextField(
+                value = replace,
+                onValueChange = onReplace,
+                placeholder = { Text("استبدال بـ") },
+                singleLine = true,
+                modifier = Modifier.width(170.dp),
+            )
+            TextButton(onClick = onReplaceOne) { Text("استبدال") }
+            TextButton(onClick = onReplaceAll) { Text("الكل") }
+            IconButton(onClick = onClose) { Icon(Icons.Default.Close, contentDescription = "إغلاق") }
+        }
+    }
+}
+
 /** تبويبات الشريط (Ribbon) بنمط WPS. */
 enum class RibbonTab { File, Home, Insert, View, Review }
 
@@ -648,6 +712,7 @@ private fun EditorRibbon(
     showRuler: Boolean,
     onToggleRuler: () -> Unit,
     onTogglePageNumber: () -> Unit,
+    onFindReplace: () -> Unit,
     onOpen: () -> Unit,
     onSave: () -> Unit,
     onSaveAs: () -> Unit,
@@ -693,11 +758,15 @@ private fun EditorRibbon(
                 RibbonButton(Icons.Default.Straighten, if (showRuler) "إخفاء المسطرة" else "إظهار المسطرة", active = showRuler, onClick = onToggleRuler)
             }
             RibbonTab.Review -> Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 12.dp),
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.AutoMirrored.Filled.Notes, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("  عدد الكلمات: $wordCount", style = MaterialTheme.typography.bodyMedium)
+                RibbonButton(Icons.Default.Search, "إيجاد واستبدال", onClick = onFindReplace)
+                ToolDivider()
+                Row(Modifier.padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.AutoMirrored.Filled.Notes, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("  عدد الكلمات: $wordCount", style = MaterialTheme.typography.bodyMedium)
+                }
             }
         }
         HorizontalDivider()
