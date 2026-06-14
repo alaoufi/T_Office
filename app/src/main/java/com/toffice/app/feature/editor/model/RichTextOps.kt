@@ -9,8 +9,20 @@ import androidx.compose.ui.text.style.TextDirection
 object RichTextOps {
 
     const val BULLET = "• "
-    private val NUM_RE = Regex("^([0-9٠-٩]+)\\. ")
+    // رقم: "(" اختياري ثم أرقام ثم فاصل (.، )، -، :) ثم مسافة/مسافات
+    private val NUM_RE = Regex("^(\\()?([0-9٠-٩]+)([.)\\-:：])( +)")
+    // نقطة: رمز ثم مسافة/مسافات
+    private val BULLET_RE = Regex("^([•◦▪‣*\\-])( +)")
     private const val ARABIC_DIGITS = "٠١٢٣٤٥٦٧٨٩"
+
+    /** مواصفة نمط القائمة (مرقّمة أو نقطية) مع الفاصل والمسافة. */
+    data class ListSpec(
+        val numbered: Boolean,
+        val sep: String = ".",     // الفاصل بعد الرقم: . أو - أو ) أو :
+        val wrap: Boolean = false, // (١) بقوسين
+        val glyph: String = "•",   // رمز النقطة
+        val spaces: Int = 1,       // المسافة بين العلامة والكلمة
+    )
 
     /** يصوغ رقماً بأرقام عربية أو لاتينية حسب السياق. */
     private fun formatNumber(n: Int, arabic: Boolean): String =
@@ -169,12 +181,21 @@ object RichTextOps {
         var end = lineStart
         while (end < text.length && text[end] != '\n') end++
         val seg = text.substring(lineStart, end)
-        if (seg.startsWith(BULLET)) return BULLET.length
-        return NUM_RE.find(seg)?.value?.length ?: 0
+        NUM_RE.find(seg)?.let { return it.value.length }
+        BULLET_RE.find(seg)?.let { return it.value.length }
+        return 0
     }
 
-    /** يبدّل قائمة (نقطية أو مرقّمة) على الفقرات المحدّدة. */
-    fun toggleList(v: TextFieldValue, numbered: Boolean): TextFieldValue {
+    private fun buildMarker(spec: ListSpec, n: Int, arabic: Boolean): String {
+        val gap = " ".repeat(spec.spaces.coerceAtLeast(1))
+        return if (spec.numbered) {
+            val num = formatNumber(n, arabic)
+            if (spec.wrap) "($num)$gap" else "$num${spec.sep}$gap"
+        } else spec.glyph + gap
+    }
+
+    /** يطبّق نمط قائمة على الفقرات المحدّدة (spec=null لإزالة القائمة). */
+    fun applyList(v: TextFieldValue, spec: ListSpec?): TextFieldValue {
         val a = v.annotatedString
         val origText = a.text
         val attrs = a.toCharAttrs()
@@ -189,7 +210,6 @@ object RichTextOps {
             if (s == e) ps <= s && s <= pe else ps <= e && pe >= s
         }
         if (selIdx.isEmpty()) return v
-        val allMarked = selIdx.all { markerLength(origText, paras[it].first) > 0 }
 
         val sb = StringBuilder(origText)
         var offset = 0
@@ -204,13 +224,11 @@ object RichTextOps {
                 if (caret > ps) caret -= minOf(curLen, caret - ps)
                 offset -= curLen
             }
-            if (!allMarked) {
-                val marker = if (numbered) {
-                    var lineEnd = ps
-                    while (lineEnd < sb.length && sb[lineEnd] != '\n') lineEnd++
-                    val arabic = isArabicContext(sb.substring(ps, lineEnd))
-                    "${formatNumber(n, arabic)}. "
-                } else BULLET
+            if (spec != null) {
+                var lineEnd = ps
+                while (lineEnd < sb.length && sb[lineEnd] != '\n') lineEnd++
+                val arabic = isArabicContext(sb.substring(ps, lineEnd))
+                val marker = buildMarker(spec, n, arabic)
                 sb.insert(ps, marker)
                 repeat(marker.length) { attrs.add(ps, CharAttrs()) }
                 if (caret >= ps) caret += marker.length
@@ -238,12 +256,17 @@ object RichTextOps {
             }
             val prevLine = new.text.substring(prevStart, caret - 1)
             val numMatch = NUM_RE.find(prevLine)
+            val bulMatch = BULLET_RE.find(prevLine)
             val marker = when {
-                prevLine.startsWith(BULLET) -> BULLET
                 numMatch != null -> {
-                    val digits = numMatch.groupValues[1]
-                    "${formatNumber(parseNumber(digits) + 1, usesArabicDigits(digits))}. "
+                    val wrap = numMatch.groupValues[1].isNotEmpty()
+                    val digits = numMatch.groupValues[2]
+                    val sep = numMatch.groupValues[3]
+                    val gap = numMatch.groupValues[4]
+                    val num = formatNumber(parseNumber(digits) + 1, usesArabicDigits(digits))
+                    if (wrap) "($num)$gap" else "$num$sep$gap"
                 }
+                bulMatch != null -> bulMatch.value
                 else -> return new
             }
             val attrs = new.annotatedString.toCharAttrs()

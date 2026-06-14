@@ -1,14 +1,19 @@
 package com.toffice.app.feature.editor
 
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
+import android.provider.OpenableColumns
 import androidx.compose.ui.text.AnnotatedString
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.toffice.app.data.document.DocumentDao
+import com.toffice.app.feature.editor.io.DocxReader
 import com.toffice.app.feature.editor.io.DocxWriter
 import com.toffice.app.feature.editor.io.PdfExporter
+import com.toffice.app.feature.editor.model.DocBundle
+import com.toffice.app.feature.editor.model.DocSerializer
 import com.toffice.app.feature.editor.model.PageSettings
 import com.toffice.app.feature.editor.model.toParagraphsOut
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -85,6 +90,55 @@ class EditorViewModel @Inject constructor(
                 _events.emit("تم الحفظ")
             }
         }
+    }
+
+    /** يفتح ملف DOCX من الجهاز ويحمّله في المحرر الحالي. */
+    fun openDocx(uri: Uri, onLoaded: (title: String, bundle: DocBundle) -> Unit) {
+        viewModelScope.launch {
+            val canWriteBack = runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                )
+            }.isSuccess
+            val bundle = kotlinx.coroutines.withContext(Dispatchers.IO) {
+                try {
+                    context.contentResolver.openInputStream(uri)?.use { DocxReader.read(it) }
+                } catch (e: Exception) {
+                    null
+                }
+            }
+            if (bundle == null) {
+                _events.emit("تعذّر فتح الملف")
+                return@launch
+            }
+            sourceUri = if (canWriteBack) uri.toString() else null
+            // حفظ نسخة داخلية في قاعدة البيانات لنفس المستند
+            if (docId > 0) {
+                val existing = dao.getById(docId)
+                if (existing != null) {
+                    dao.update(
+                        existing.copy(
+                            title = fileName(uri),
+                            contentJson = DocSerializer.serialize(bundle),
+                            sourceUri = sourceUri,
+                            updatedAt = System.currentTimeMillis(),
+                        )
+                    )
+                }
+            }
+            onLoaded(fileName(uri), bundle)
+            _events.emit("تم فتح الملف")
+        }
+    }
+
+    private fun fileName(uri: Uri): String = try {
+        context.contentResolver.query(uri, null, null, null, null)?.use { c ->
+            val idx = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            if (idx >= 0 && c.moveToFirst()) c.getString(idx).substringBeforeLast(".").ifBlank { "مستند" } else "مستند"
+        } ?: "مستند"
+    } catch (e: Exception) {
+        "مستند"
     }
 
     fun exportDocx(uri: Uri, annotated: AnnotatedString, page: PageSettings, header: AnnotatedString, footer: AnnotatedString) {

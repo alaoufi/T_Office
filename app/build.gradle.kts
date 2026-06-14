@@ -76,4 +76,8 @@ dependencies {
     implementation(libs.coil.compose)
 
     coreLibraryDesugaring(libs.desugar.jdk.libs)
+
+    testImplementation("junit:junit:4.13.2")
+    testImplementation(platform(libs.androidx.compose.bom))
+    testImplementation("androidx.compose.ui:ui-text")
 }

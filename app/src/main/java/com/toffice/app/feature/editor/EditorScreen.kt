@@ -47,7 +47,9 @@ import androidx.compose.material.icons.filled.FormatColorFill
 import androidx.compose.material.icons.filled.FormatColorReset
 import androidx.compose.material.icons.filled.FontDownload
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.FormatColorText
+import androidx.compose.material.icons.filled.SaveAs
 import androidx.compose.material.icons.filled.FormatItalic
 import androidx.compose.material.icons.filled.FormatLineSpacing
 import androidx.compose.material.icons.filled.FormatListNumbered
@@ -193,6 +195,19 @@ fun EditorScreen(
     // تخطيط متجاوب: التابلت شريط أدوات علوي، الجوال سفلي
     val isCompact = LocalConfiguration.current.screenWidthDp < 600
 
+    val openLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) viewModel.openDocx(uri) { newTitle, bundle ->
+            title = newTitle
+            value = TextFieldValue(bundle.body)
+            page = bundle.page
+            header = TextFieldValue(bundle.header)
+            footer = TextFieldValue(bundle.footer)
+            undoStack.clear()
+            redoStack.clear()
+        }
+    }
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument(MIME_DOCX)
     ) { uri ->
@@ -267,9 +282,19 @@ fun EditorScreen(
                         }
                         DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                             DropdownMenuItem(
+                                text = { Text("فتح ملف…") },
+                                leadingIcon = { Icon(Icons.Default.FolderOpen, null) },
+                                onClick = { showMenu = false; openLauncher.launch(arrayOf(MIME_DOCX, "application/msword", "*/*")) },
+                            )
+                            DropdownMenuItem(
                                 text = { Text("حفظ") },
                                 leadingIcon = { Icon(Icons.Default.Save, null) },
                                 onClick = { showMenu = false; persist() },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("حفظ باسم… (DOCX)") },
+                                leadingIcon = { Icon(Icons.Default.SaveAs, null) },
+                                onClick = { showMenu = false; exportLauncher.launch("${title.ifBlank { "مستند" }}.docx") },
                             )
                             HorizontalDivider()
                             DropdownMenuItem(
@@ -283,11 +308,6 @@ fun EditorScreen(
                                 onClick = { page = page.copy(showPageNumber = !page.showPageNumber); showMenu = false },
                             )
                             HorizontalDivider()
-                            DropdownMenuItem(
-                                text = { Text("تصدير Word (DOCX)") },
-                                leadingIcon = { Icon(Icons.Default.Upload, null) },
-                                onClick = { showMenu = false; exportLauncher.launch("${title.ifBlank { "مستند" }}.docx") },
-                            )
                             DropdownMenuItem(
                                 text = { Text("تصدير PDF") },
                                 leadingIcon = { Icon(Icons.Default.PictureAsPdf, null) },
@@ -591,6 +611,22 @@ private val LINE_SPACINGS = listOf(
     2.0f to "مزدوج (٢٫٠)",
 )
 
+private val BULLET_STYLES = listOf(
+    "•  نقطة" to RichTextOps.ListSpec(numbered = false, glyph = "•"),
+    "◦  دائرة" to RichTextOps.ListSpec(numbered = false, glyph = "◦"),
+    "▪  مربّع" to RichTextOps.ListSpec(numbered = false, glyph = "▪"),
+    "−  شرطة" to RichTextOps.ListSpec(numbered = false, glyph = "-"),
+)
+
+private val NUMBER_STYLES = listOf(
+    "١.  نقطة" to RichTextOps.ListSpec(numbered = true, sep = "."),
+    "١-  شرطة" to RichTextOps.ListSpec(numbered = true, sep = "-"),
+    "١)  قوس" to RichTextOps.ListSpec(numbered = true, sep = ")"),
+    "(١) قوسان" to RichTextOps.ListSpec(numbered = true, sep = ")", wrap = true),
+    "١:  نقطتان" to RichTextOps.ListSpec(numbered = true, sep = ":"),
+    "١.    مسافة واسعة" to RichTextOps.ListSpec(numbered = true, sep = ".", spaces = 3),
+)
+
 @Composable
 private fun FormatToolbar(value: TextFieldValue, onChange: (TextFieldValue) -> Unit) {
     val cur = RichTextOps.currentAttrs(value)
@@ -604,6 +640,8 @@ private fun FormatToolbar(value: TextFieldValue, onChange: (TextFieldValue) -> U
     var alignMenu by remember { mutableStateOf(false) }
     var dirMenu by remember { mutableStateOf(false) }
     var spacingMenu by remember { mutableStateOf(false) }
+    var bulletMenu by remember { mutableStateOf(false) }
+    var numberMenu by remember { mutableStateOf(false) }
     var moreMenu by remember { mutableStateOf(false) }
 
     Row(
@@ -721,12 +759,28 @@ private fun FormatToolbar(value: TextFieldValue, onChange: (TextFieldValue) -> U
         }
         ToolDivider()
 
-        // القوائم (نقطية / مرقّمة)
-        ToolToggle(Icons.AutoMirrored.Filled.FormatListBulleted, "قائمة نقطية", false) {
-            onChange(RichTextOps.toggleList(value, numbered = false))
+        // القوائم (نقطية / مرقّمة) — بخيارات الفاصل والمسافة
+        Box {
+            IconButton(onClick = { bulletMenu = true }) {
+                Icon(Icons.AutoMirrored.Filled.FormatListBulleted, "قائمة نقطية", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            DropdownMenu(expanded = bulletMenu, onDismissRequest = { bulletMenu = false }) {
+                BULLET_STYLES.forEach { (label, spec) ->
+                    DropdownMenuItem(text = { Text(label) }, onClick = { onChange(RichTextOps.applyList(value, spec)); bulletMenu = false })
+                }
+                MenuChoice("بلا قائمة", Icons.Default.FormatColorReset, false) { onChange(RichTextOps.applyList(value, null)); bulletMenu = false }
+            }
         }
-        ToolToggle(Icons.Default.FormatListNumbered, "قائمة مرقّمة", false) {
-            onChange(RichTextOps.toggleList(value, numbered = true))
+        Box {
+            IconButton(onClick = { numberMenu = true }) {
+                Icon(Icons.Default.FormatListNumbered, "قائمة مرقّمة", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            DropdownMenu(expanded = numberMenu, onDismissRequest = { numberMenu = false }) {
+                NUMBER_STYLES.forEach { (label, spec) ->
+                    DropdownMenuItem(text = { Text(label) }, onClick = { onChange(RichTextOps.applyList(value, spec)); numberMenu = false })
+                }
+                MenuChoice("بلا قائمة", Icons.Default.FormatColorReset, false) { onChange(RichTextOps.applyList(value, null)); numberMenu = false }
+            }
         }
         ToolDivider()
 
