@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -691,8 +692,7 @@ private fun FormatToolbar(value: TextFieldValue, onChange: (TextFieldValue) -> U
     var alignMenu by remember { mutableStateOf(false) }
     var dirMenu by remember { mutableStateOf(false) }
     var spacingMenu by remember { mutableStateOf(false) }
-    var bulletMenu by remember { mutableStateOf(false) }
-    var numberMenu by remember { mutableStateOf(false) }
+    var listDialog by remember { mutableStateOf(false) }
     var moreMenu by remember { mutableStateOf(false) }
 
     Row(
@@ -810,29 +810,8 @@ private fun FormatToolbar(value: TextFieldValue, onChange: (TextFieldValue) -> U
         }
         ToolDivider()
 
-        // القوائم (نقطية / مرقّمة) — بخيارات الفاصل والمسافة
-        Box {
-            IconButton(onClick = { bulletMenu = true }) {
-                Icon(Icons.AutoMirrored.Filled.FormatListBulleted, "قائمة نقطية", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            DropdownMenu(expanded = bulletMenu, onDismissRequest = { bulletMenu = false }) {
-                BULLET_STYLES.forEach { (label, spec) ->
-                    DropdownMenuItem(text = { Text(label) }, onClick = { onChange(RichTextOps.applyList(value, spec)); bulletMenu = false })
-                }
-                MenuChoice("بلا قائمة", Icons.Default.FormatColorReset, false) { onChange(RichTextOps.applyList(value, null)); bulletMenu = false }
-            }
-        }
-        Box {
-            IconButton(onClick = { numberMenu = true }) {
-                Icon(Icons.Default.FormatListNumbered, "قائمة مرقّمة", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            DropdownMenu(expanded = numberMenu, onDismissRequest = { numberMenu = false }) {
-                NUMBER_STYLES.forEach { (label, spec) ->
-                    DropdownMenuItem(text = { Text(label) }, onClick = { onChange(RichTextOps.applyList(value, spec)); numberMenu = false })
-                }
-                MenuChoice("بلا قائمة", Icons.Default.FormatColorReset, false) { onChange(RichTextOps.applyList(value, null)); numberMenu = false }
-            }
-        }
+        // النقاط والترقيم — مربّع اختيار مدمج (شبكة معاينات)
+        ToolToggle(Icons.AutoMirrored.Filled.FormatListBulleted, "النقاط والترقيم", false) { listDialog = true }
         ToolDivider()
 
         // المزيد (تظليل / يتوسطه خط)
@@ -844,6 +823,83 @@ private fun FormatToolbar(value: TextFieldValue, onChange: (TextFieldValue) -> U
                 MenuChoice("يتوسطه خط", Icons.Default.StrikethroughS, cur.strike) { onChange(RichTextOps.toggleStrike(value)); moreMenu = false }
                 MenuChoice("تظليل أصفر", Icons.Default.FormatColorFill, cur.highlightArgb != 0) { onChange(RichTextOps.setHighlight(value, 0xFFFFEB3B.toInt())); moreMenu = false }
                 MenuChoice("إزالة التظليل", Icons.Default.FormatColorReset, false) { onChange(RichTextOps.setHighlight(value, 0)); moreMenu = false }
+            }
+        }
+    }
+
+    if (listDialog) {
+        ListPickerDialog(
+            onPick = { spec -> onChange(RichTextOps.applyList(value, spec)); listDialog = false },
+            onDismiss = { listDialog = false },
+        )
+    }
+}
+
+/** مربّع اختيار النقاط والترقيم — شبكة معاينات مدمجة (مثل WPS). */
+@Composable
+private fun ListPickerDialog(
+    onPick: (RichTextOps.ListSpec?) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = { onPick(null) }) { Text("بلا قائمة") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("إغلاق") } },
+        title = { Text("النقاط والترقيم") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                Text("نقاط", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(bottom = 4.dp))
+                ListStyleGrid(BULLET_STYLES.map { it.second }, onPick)
+                Spacer(Modifier.height(12.dp))
+                Text("ترقيم", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(bottom = 4.dp))
+                ListStyleGrid(NUMBER_STYLES.map { it.second }, onPick)
+            }
+        },
+    )
+}
+
+@Composable
+private fun ListStyleGrid(specs: List<RichTextOps.ListSpec>, onPick: (RichTextOps.ListSpec?) -> Unit) {
+    Column {
+        specs.chunked(4).forEach { row ->
+            Row {
+                row.forEach { spec ->
+                    ListStyleCell(spec) { onPick(spec) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ListStyleCell(spec: RichTextOps.ListSpec, onClick: () -> Unit) {
+    val lines = if (spec.numbered) {
+        (1..3).map { RichTextOps.previewMarker(spec, it).trimEnd() }
+    } else {
+        List(3) { spec.glyph }
+    }
+    Box(
+        Modifier
+            .padding(3.dp)
+            .size(width = 60.dp, height = 52.dp)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(6.dp))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.Start) {
+            lines.forEach { m ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(m, fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurface)
+                    Box(
+                        Modifier
+                            .padding(start = 3.dp)
+                            .width(22.dp)
+                            .height(2.dp)
+                            .background(MaterialTheme.colorScheme.outlineVariant),
+                    )
+                }
             }
         }
     }

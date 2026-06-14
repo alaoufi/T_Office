@@ -200,6 +200,9 @@ object RichTextOps {
         } else spec.glyph + gap
     }
 
+    /** علامة المعاينة للعنصر n (سياق عربي) — لعرضها في مربّع الاختيار. */
+    fun previewMarker(spec: ListSpec, n: Int): String = buildMarker(spec, n, arabic = true)
+
     private fun formatNum(n: Int, type: NumType, arabic: Boolean): String = when (type) {
         NumType.DECIMAL -> formatNumber(n, arabic)
         NumType.UPPER_ROMAN -> toRoman(n)
