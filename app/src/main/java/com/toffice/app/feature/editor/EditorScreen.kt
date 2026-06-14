@@ -77,6 +77,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.TextFieldValue
@@ -162,6 +163,9 @@ fun EditorScreen(
     var showMenu by remember { mutableStateOf(false) }
     var showPageSetup by remember { mutableStateOf(false) }
 
+    // تخطيط متجاوب: التابلت شريط أدوات علوي، الجوال سفلي
+    val isCompact = LocalConfiguration.current.screenWidthDp < 600
+
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument(MIME_DOCX)
     ) { uri ->
@@ -241,9 +245,16 @@ fun EditorScreen(
                 },
             )
         },
+        bottomBar = {
+            if (isCompact) FormatToolbar(value = value, onChange = { update(it) })
+        },
     ) { padding ->
-        Column(Modifier.fillMaxSize().padding(top = padding.calculateTopPadding())) {
-            FormatToolbar(value = value, onChange = { update(it) })
+        Column(
+            Modifier
+                .fillMaxSize()
+                .padding(top = padding.calculateTopPadding(), bottom = padding.calculateBottomPadding()),
+        ) {
+            if (!isCompact) FormatToolbar(value = value, onChange = { update(it) })
 
             if (showPageSetup) {
                 PageSetupDialog(
