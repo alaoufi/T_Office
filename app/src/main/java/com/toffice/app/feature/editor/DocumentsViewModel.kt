@@ -1,0 +1,87 @@
+package com.toffice.app.feature.editor
+
+import android.content.Context
+import android.net.Uri
+import android.provider.OpenableColumns
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.toffice.app.data.document.DocumentDao
+import com.toffice.app.data.document.DocumentEntity
+import com.toffice.app.feature.editor.io.DocxReader
+import com.toffice.app.feature.editor.model.annotatedToJson
+import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import javax.inject.Inject
+
+data class DocumentsUiState(
+    val documents: List<DocumentEntity> = emptyList(),
+    val isLoading: Boolean = true,
+)
+
+@HiltViewModel
+class DocumentsViewModel @Inject constructor(
+    private val dao: DocumentDao,
+    @ApplicationContext private val context: Context,
+) : ViewModel() {
+
+    val uiState = dao.observeAll()
+        .map { DocumentsUiState(it, isLoading = false) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DocumentsUiState())
+
+    private val _events = MutableSharedFlow<String>()
+    val events = _events.asSharedFlow()
+
+    fun createNew(onCreated: (Long) -> Unit) {
+        viewModelScope.launch {
+            val id = dao.insert(DocumentEntity(title = "مستند جديد", contentJson = ""))
+            onCreated(id)
+        }
+    }
+
+    fun importDocx(uri: Uri, onImported: (Long) -> Unit) {
+        viewModelScope.launch {
+            val json = withContext(Dispatchers.IO) {
+                try {
+                    context.contentResolver.openInputStream(uri)?.use {
+                        annotatedToJson(DocxReader.read(it))
+                    }
+                } catch (e: Exception) {
+                    null
+                }
+            }
+            if (json == null) {
+                _events.emit("تعذّر فتح ملف Word")
+                return@launch
+            }
+            val name = displayName(uri)
+            val id = dao.insert(DocumentEntity(title = name, contentJson = json))
+            _events.emit("تم فتح الملف")
+            onImported(id)
+        }
+    }
+
+    fun delete(doc: DocumentEntity) {
+        viewModelScope.launch { dao.delete(doc) }
+    }
+
+    private fun displayName(uri: Uri): String {
+        return try {
+            context.contentResolver.query(uri, null, null, null, null)?.use { c ->
+                val idx = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (idx >= 0 && c.moveToFirst()) {
+                    c.getString(idx).substringBeforeLast(".").ifBlank { "مستند مستورد" }
+                } else "مستند مستورد"
+            } ?: "مستند مستورد"
+        } catch (e: Exception) {
+            "مستند مستورد"
+        }
+    }
+}

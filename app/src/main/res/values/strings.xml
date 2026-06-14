@@ -5,7 +5,6 @@
     <!-- الوحدات (بترتيب وتسمية أوفيس) -->
     <string name="module_editor">مستندات</string>
     <string name="module_sheets">جداول بيانات</string>
-    <string name="module_slides">عروض تقديمية</string>
     <string name="module_notes">ملاحظات</string>
     <string name="module_calendar">التقويم والمواعيد</string>
     <string name="module_tasks">المهام</string>
@@ -17,7 +16,6 @@
     <!-- أسماء أوفيس (تظهر تحت الاسم العربي) -->
     <string name="office_word">Word</string>
     <string name="office_excel">Excel</string>
-    <string name="office_powerpoint">PowerPoint</string>
     <string name="office_onenote">OneNote</string>
     <string name="office_outlook">Outlook</string>
     <string name="office_todo">To Do</string>

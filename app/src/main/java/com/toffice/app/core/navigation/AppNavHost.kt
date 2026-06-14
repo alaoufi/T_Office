@@ -2,11 +2,15 @@ package com.toffice.app.core.navigation
 
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.toffice.app.feature.common.PlaceholderScreen
 import com.toffice.app.feature.dashboard.DashboardScreen
+import com.toffice.app.feature.editor.DocumentsListScreen
+import com.toffice.app.feature.editor.EditorScreen
 import com.toffice.app.feature.tasks.TasksScreen
 
 @Composable
@@ -21,9 +25,6 @@ fun AppNavHost(navController: NavHostController = rememberNavController()) {
         composable(Routes.SHEETS) {
             PlaceholderScreen(title = "جداول بيانات (Excel)", onBack = { navController.popBackStack() })
         }
-        composable(Routes.SLIDES) {
-            PlaceholderScreen(title = "عروض تقديمية (PowerPoint)", onBack = { navController.popBackStack() })
-        }
         composable(Routes.NOTES) {
             PlaceholderScreen(title = "ملاحظات (OneNote)", onBack = { navController.popBackStack() })
         }
@@ -37,7 +38,16 @@ fun AppNavHost(navController: NavHostController = rememberNavController()) {
             PlaceholderScreen(title = "الملفات والمستندات", onBack = { navController.popBackStack() })
         }
         composable(Routes.EDITOR) {
-            PlaceholderScreen(title = "مستندات (Word)", onBack = { navController.popBackStack() })
+            DocumentsListScreen(
+                onBack = { navController.popBackStack() },
+                onOpenDocument = { id -> navController.navigate(Routes.editorDoc(id)) },
+            )
+        }
+        composable(
+            route = Routes.EDITOR_DOC,
+            arguments = listOf(navArgument("docId") { type = NavType.StringType }),
+        ) {
+            EditorScreen(onBack = { navController.popBackStack() })
         }
         composable(Routes.BACKUP) {
             PlaceholderScreen(title = "النسخ الاحتياطي", onBack = { navController.popBackStack() })

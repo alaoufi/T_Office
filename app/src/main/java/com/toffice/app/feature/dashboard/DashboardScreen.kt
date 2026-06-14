@@ -23,7 +23,6 @@ import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Slideshow
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -58,7 +57,6 @@ fun DashboardScreen(onOpenModule: (String) -> Unit) {
     val modules = listOf(
         ModuleItem(R.string.module_editor, R.string.office_word, Icons.Default.Description, Color(0xFF2B579A), Routes.EDITOR),
         ModuleItem(R.string.module_sheets, R.string.office_excel, Icons.Default.GridOn, Color(0xFF217346), Routes.SHEETS),
-        ModuleItem(R.string.module_slides, R.string.office_powerpoint, Icons.Default.Slideshow, Color(0xFFC43E1C), Routes.SLIDES),
         ModuleItem(R.string.module_notes, R.string.office_onenote, Icons.AutoMirrored.Filled.Notes, Color(0xFF7719AA), Routes.NOTES),
         ModuleItem(R.string.module_calendar, R.string.office_outlook, Icons.Default.CalendarMonth, Color(0xFF0078D4), Routes.CALENDAR),
         ModuleItem(R.string.module_tasks, R.string.office_todo, Icons.Default.CheckCircle, Color(0xFF2564CF), Routes.TASKS),

@@ -6,12 +6,14 @@ object Routes {
     // Office-style apps
     const val EDITOR = "editor"       // Word — مستندات
     const val SHEETS = "sheets"       // Excel — جداول بيانات
-    const val SLIDES = "slides"       // PowerPoint — عروض تقديمية
     const val NOTES = "notes"         // OneNote — ملاحظات
     const val CALENDAR = "calendar"   // Outlook — التقويم والمواعيد
     const val TASKS = "tasks"         // To Do — المهام
     const val EXPENSES = "expenses"   // الميزانية والمصروفات
     const val DOCUMENTS = "documents" // الملفات والمستندات
+
+    const val EDITOR_DOC = "editor/{docId}"
+    fun editorDoc(id: Long) = "editor/$id"
 
     // System
     const val BACKUP = "backup"
