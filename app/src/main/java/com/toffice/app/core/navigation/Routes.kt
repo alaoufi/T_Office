@@ -2,12 +2,18 @@ package com.toffice.app.core.navigation
 
 object Routes {
     const val DASHBOARD = "dashboard"
-    const val TASKS = "tasks"
-    const val NOTES = "notes"
-    const val CALENDAR = "calendar"
-    const val EXPENSES = "expenses"
-    const val DOCUMENTS = "documents"
-    const val EDITOR = "editor"
+
+    // Office-style apps
+    const val EDITOR = "editor"       // Word — مستندات
+    const val SHEETS = "sheets"       // Excel — جداول بيانات
+    const val SLIDES = "slides"       // PowerPoint — عروض تقديمية
+    const val NOTES = "notes"         // OneNote — ملاحظات
+    const val CALENDAR = "calendar"   // Outlook — التقويم والمواعيد
+    const val TASKS = "tasks"         // To Do — المهام
+    const val EXPENSES = "expenses"   // الميزانية والمصروفات
+    const val DOCUMENTS = "documents" // الملفات والمستندات
+
+    // System
     const val BACKUP = "backup"
     const val SETTINGS = "settings"
 }

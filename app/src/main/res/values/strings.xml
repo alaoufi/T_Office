@@ -2,18 +2,30 @@
 <resources>
     <string name="app_name">مكتبي</string>
 
-    <!-- الوحدات -->
+    <!-- الوحدات (بترتيب وتسمية أوفيس) -->
+    <string name="module_editor">مستندات</string>
+    <string name="module_sheets">جداول بيانات</string>
+    <string name="module_slides">عروض تقديمية</string>
+    <string name="module_notes">ملاحظات</string>
+    <string name="module_calendar">التقويم والمواعيد</string>
     <string name="module_tasks">المهام</string>
-    <string name="module_notes">الملاحظات</string>
-    <string name="module_calendar">المواعيد</string>
-    <string name="module_expenses">المصروفات</string>
-    <string name="module_documents">المستندات</string>
-    <string name="module_editor">محرر النصوص</string>
+    <string name="module_expenses">الميزانية</string>
+    <string name="module_documents">الملفات والمستندات</string>
     <string name="module_backup">النسخ الاحتياطي</string>
     <string name="module_settings">الإعدادات</string>
 
+    <!-- أسماء أوفيس (تظهر تحت الاسم العربي) -->
+    <string name="office_word">Word</string>
+    <string name="office_excel">Excel</string>
+    <string name="office_powerpoint">PowerPoint</string>
+    <string name="office_onenote">OneNote</string>
+    <string name="office_outlook">Outlook</string>
+    <string name="office_todo">To Do</string>
+    <string name="office_money">Money</string>
+    <string name="office_onedrive">OneDrive</string>
+
     <string name="dashboard_title">مكتبي</string>
-    <string name="dashboard_subtitle">مكتبك الشخصي بين يديك</string>
+    <string name="dashboard_subtitle">مجموعة مكتبك الشخصي الكاملة</string>
 
     <!-- عام -->
     <string name="action_add">إضافة</string>

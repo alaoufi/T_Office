@@ -18,20 +18,26 @@ fun AppNavHost(navController: NavHostController = rememberNavController()) {
         composable(Routes.TASKS) {
             TasksScreen(onBack = { navController.popBackStack() })
         }
+        composable(Routes.SHEETS) {
+            PlaceholderScreen(title = "جداول بيانات (Excel)", onBack = { navController.popBackStack() })
+        }
+        composable(Routes.SLIDES) {
+            PlaceholderScreen(title = "عروض تقديمية (PowerPoint)", onBack = { navController.popBackStack() })
+        }
         composable(Routes.NOTES) {
-            PlaceholderScreen(title = "الملاحظات", onBack = { navController.popBackStack() })
+            PlaceholderScreen(title = "ملاحظات (OneNote)", onBack = { navController.popBackStack() })
         }
         composable(Routes.CALENDAR) {
-            PlaceholderScreen(title = "المواعيد", onBack = { navController.popBackStack() })
+            PlaceholderScreen(title = "التقويم والمواعيد (Outlook)", onBack = { navController.popBackStack() })
         }
         composable(Routes.EXPENSES) {
-            PlaceholderScreen(title = "المصروفات", onBack = { navController.popBackStack() })
+            PlaceholderScreen(title = "الميزانية", onBack = { navController.popBackStack() })
         }
         composable(Routes.DOCUMENTS) {
-            PlaceholderScreen(title = "المستندات", onBack = { navController.popBackStack() })
+            PlaceholderScreen(title = "الملفات والمستندات", onBack = { navController.popBackStack() })
         }
         composable(Routes.EDITOR) {
-            PlaceholderScreen(title = "محرر النصوص", onBack = { navController.popBackStack() })
+            PlaceholderScreen(title = "مستندات (Word)", onBack = { navController.popBackStack() })
         }
         composable(Routes.BACKUP) {
             PlaceholderScreen(title = "النسخ الاحتياطي", onBack = { navController.popBackStack() })
