@@ -47,7 +47,7 @@ class DocumentsViewModel @Inject constructor(
     fun createNew(onCreated: (Long) -> Unit) {
         viewModelScope.launch {
             val page = settings.defaultPageSettings()
-            val json = DocSerializer.serialize(DocBundle(AnnotatedString(""), page, "", ""))
+            val json = DocSerializer.serialize(DocBundle(AnnotatedString(""), page))
             val id = dao.insert(DocumentEntity(title = "مستند جديد", contentJson = json))
             onCreated(id)
         }

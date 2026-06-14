@@ -15,11 +15,11 @@ object DocxWriter {
         out: OutputStream,
         paragraphs: List<ParaOut>,
         page: PageSettings = PageSettings(),
-        header: String = "",
-        footer: String = "",
+        header: List<ParaOut> = emptyList(),
+        footer: List<ParaOut> = emptyList(),
     ) {
-        val hasHeader = header.isNotBlank()
-        val hasFooter = footer.isNotBlank() || page.showPageNumber
+        val hasHeader = header.any { it.runs.isNotEmpty() }
+        val hasFooter = footer.any { it.runs.isNotEmpty() } || page.showPageNumber
 
         ZipOutputStream(out).use { zip ->
             zip.entry("[Content_Types].xml", contentTypes(hasHeader, hasFooter))
@@ -159,25 +159,21 @@ object DocxWriter {
         return sb.toString()
     }
 
-    private fun headerFooterPart(tag: String, text: String, pageNumber: Boolean): String {
+    private fun headerFooterPart(tag: String, paras: List<ParaOut>, pageNumber: Boolean): String {
         val sb = StringBuilder()
         sb.append("""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>""")
         sb.append("<w:").append(tag)
             .append(" xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\">")
-        if (text.isNotBlank()) {
-            for (line in text.split('\n')) {
-                sb.append("<w:p><w:pPr><w:bidi/><w:jc w:val=\"right\"/></w:pPr>")
-                sb.append("<w:r><w:rPr><w:rtl/></w:rPr><w:t xml:space=\"preserve\">")
-                    .append(escape(line)).append("</w:t></w:r></w:p>")
-            }
-        }
+        val hasText = paras.any { it.runs.isNotEmpty() }
+        // فقرات منسّقة (تنسيق الخط محفوظ كما المتن)
+        for (p in paras) if (p.runs.isNotEmpty()) sb.append(paragraph(p))
         if (pageNumber) {
             // فقرة رقم الصفحة (حقل PAGE) في المنتصف
             sb.append("<w:p><w:pPr><w:jc w:val=\"center\"/></w:pPr>")
             sb.append("<w:fldSimple w:instr=\" PAGE \"><w:r><w:t>1</w:t></w:r></w:fldSimple>")
             sb.append("</w:p>")
         }
-        if (text.isBlank() && !pageNumber) {
+        if (!hasText && !pageNumber) {
             sb.append("<w:p/>")
         }
         sb.append("</w:").append(tag).append(">")

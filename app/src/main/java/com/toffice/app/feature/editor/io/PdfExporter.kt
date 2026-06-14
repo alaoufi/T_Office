@@ -35,8 +35,8 @@ object PdfExporter {
         out: OutputStream,
         body: AnnotatedString,
         page: PageSettings,
-        header: String,
-        footer: String,
+        header: AnnotatedString,
+        footer: AnnotatedString,
     ) {
         val pageW = page.pageWidthPt.toInt().coerceAtLeast(100)
         val pageH = page.pageHeightPt.toInt().coerceAtLeast(100)
@@ -75,9 +75,9 @@ object PdfExporter {
             val pdfPage = doc.startPage(PdfDocument.PageInfo.Builder(pageW, pageH, pageIndex + 1).create())
             val canvas = pdfPage.canvas
 
-            // الترويسة
-            if (header.isNotBlank()) {
-                drawSimpleText(canvas, header, left.toFloat(), 14f, contentW, paint.textSize)
+            // الترويسة (بتنسيقها)
+            if (header.text.isNotBlank()) {
+                drawRichText(canvas, header, left.toFloat(), 14f, contentW)
             }
             // المتن (شريحة الصفحة)
             canvas.save()
@@ -85,9 +85,9 @@ object PdfExporter {
             canvas.clipRect(0f, sliceTop.toFloat(), contentW.toFloat(), (sliceTop + bodyHeight).toFloat())
             layout.draw(canvas)
             canvas.restore()
-            // التذييل
-            if (footer.isNotBlank()) {
-                drawSimpleText(canvas, footer, left.toFloat(), (pageH - bottom + 6).toFloat(), contentW, paint.textSize)
+            // التذييل (بتنسيقه)
+            if (footer.text.isNotBlank()) {
+                drawRichText(canvas, footer, left.toFloat(), (pageH - bottom + 6).toFloat(), contentW)
             }
             // رقم الصفحة
             if (page.showPageNumber) {
@@ -104,16 +104,15 @@ object PdfExporter {
         doc.close()
     }
 
-    private fun drawSimpleText(
+    private fun drawRichText(
         canvas: android.graphics.Canvas,
-        text: String,
+        annotated: AnnotatedString,
         x: Float,
         y: Float,
         width: Int,
-        textSize: Float,
     ) {
-        val tp = TextPaint().apply { isAntiAlias = true; color = Color.DKGRAY; this.textSize = textSize * 0.85f }
-        val sp = SpannableStringBuilder(text)
+        val tp = TextPaint().apply { isAntiAlias = true; color = Color.BLACK; textSize = DEFAULT_FONT_SP.toFloat() }
+        val sp = toSpannable(annotated)
         val l = StaticLayout.Builder.obtain(sp, 0, sp.length, tp, width)
             .setAlignment(Layout.Alignment.ALIGN_NORMAL)
             .setTextDirection(TextDirectionHeuristics.FIRSTSTRONG_RTL)

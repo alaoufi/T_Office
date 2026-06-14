@@ -56,12 +56,12 @@ fun PageSettings.currentPresetId(): String {
     }?.id ?: "A4"
 }
 
-/** المستند الكامل: المتن المنسّق + إعدادات الصفحة + الترويسة + التذييل. */
+/** المستند الكامل: المتن المنسّق + إعدادات الصفحة + الترويسة + التذييل (كلها منسّقة). */
 data class DocBundle(
     val body: AnnotatedString,
     val page: PageSettings = PageSettings(),
-    val header: String = "",
-    val footer: String = "",
+    val header: AnnotatedString = AnnotatedString(""),
+    val footer: AnnotatedString = AnnotatedString(""),
 )
 
 /** تسلسل المستند الكامل إلى/من JSON (صيغة التطبيق الداخلية). */
@@ -81,9 +81,16 @@ object DocSerializer {
         return JSONObject()
             .put("body", bodyObj)
             .put("page", page)
-            .put("header", bundle.header)
-            .put("footer", bundle.footer)
+            .put("header", JSONObject(annotatedToJson(bundle.header)))
+            .put("footer", JSONObject(annotatedToJson(bundle.footer)))
             .toString()
+    }
+
+    /** يقرأ حقلاً منسّقاً (الصيغة الجديدة JSONObject) مع توافق مع الصيغة القديمة (نص عادي). */
+    private fun parseRich(obj: JSONObject, key: String): AnnotatedString {
+        val o = obj.optJSONObject(key)
+        if (o != null) return jsonToAnnotated(o.toString())
+        return AnnotatedString(obj.optString(key, ""))
     }
 
     fun parse(json: String): DocBundle {
@@ -108,8 +115,8 @@ object DocSerializer {
         return DocBundle(
             body = body,
             page = page,
-            header = obj.optString("header", ""),
-            footer = obj.optString("footer", ""),
+            header = parseRich(obj, "header"),
+            footer = parseRich(obj, "footer"),
         )
     }
 }

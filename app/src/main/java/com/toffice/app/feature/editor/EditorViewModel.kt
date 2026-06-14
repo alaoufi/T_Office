@@ -63,8 +63,8 @@ class EditorViewModel @Inject constructor(
         json: String,
         annotated: AnnotatedString,
         page: PageSettings,
-        header: String,
-        footer: String,
+        header: AnnotatedString,
+        footer: AnnotatedString,
     ) {
         viewModelScope.launch {
             val existing = if (docId > 0) dao.getById(docId) else null
@@ -87,14 +87,14 @@ class EditorViewModel @Inject constructor(
         }
     }
 
-    fun exportDocx(uri: Uri, annotated: AnnotatedString, page: PageSettings, header: String, footer: String) {
+    fun exportDocx(uri: Uri, annotated: AnnotatedString, page: PageSettings, header: AnnotatedString, footer: AnnotatedString) {
         viewModelScope.launch {
             val ok = writeDocxTo(uri, annotated, page, header, footer)
             _events.emit(if (ok) "تم تصدير ملف Word بنجاح" else "تعذّر التصدير")
         }
     }
 
-    fun exportPdf(uri: Uri, annotated: AnnotatedString, page: PageSettings, header: String, footer: String) {
+    fun exportPdf(uri: Uri, annotated: AnnotatedString, page: PageSettings, header: AnnotatedString, footer: AnnotatedString) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 context.contentResolver.openOutputStream(uri)?.use {
@@ -111,14 +111,14 @@ class EditorViewModel @Inject constructor(
         uri: Uri,
         annotated: AnnotatedString,
         page: PageSettings,
-        header: String,
-        footer: String,
+        header: AnnotatedString,
+        footer: AnnotatedString,
     ): Boolean = kotlinx.coroutines.withContext(Dispatchers.IO) {
         try {
             // "wt" يقتطع الملف قبل الكتابة لتفادي بقايا قديمة
             val mode = if (uri.scheme == "content") "wt" else "w"
             context.contentResolver.openOutputStream(uri, mode)?.use {
-                DocxWriter.write(it, annotated.toParagraphsOut(), page, header, footer)
+                DocxWriter.write(it, annotated.toParagraphsOut(), page, header.toParagraphsOut(), footer.toParagraphsOut())
             } ?: return@withContext false
             true
         } catch (e: Exception) {

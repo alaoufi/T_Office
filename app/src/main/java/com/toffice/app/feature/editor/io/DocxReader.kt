@@ -42,8 +42,8 @@ object DocxReader {
         return DocBundle(
             body = parsed.first,
             page = parsed.second.copy(showPageNumber = showPageNumber, rtlPage = rtlPage),
-            header = headerXml?.let { plainText(it) } ?: "",
-            footer = footerText,
+            header = AnnotatedString(headerXml?.let { plainText(it) } ?: ""),
+            footer = AnnotatedString(footerText),
         )
     }
 

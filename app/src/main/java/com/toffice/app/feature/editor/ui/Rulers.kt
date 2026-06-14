@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
@@ -18,7 +19,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.toffice.app.feature.editor.model.PT_PER_CM
 import kotlin.math.ceil
@@ -48,7 +51,11 @@ fun HorizontalRuler(
     val curLeft by rememberUpdatedState(marginLeftPt)
     val curRight by rememberUpdatedState(marginRightPt)
     val onChangeState by rememberUpdatedState(onChange)
+    val halfHandlePx = (HANDLE_DP * density / 2f).roundToInt()
 
+    // نُثبّت اتجاه المسطرة على LTR داخلياً حتى تكون إحداثيات المقابض فيزيائية،
+    // ونتولّى عكس الأرقام يدوياً عبر mapX حسب rtl (لتفادي الانعكاس المزدوج).
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
     Box(Modifier.width(widthDp.dp).height(RULER_THICK_DP.dp).background(rulerBg)) {
         Canvas(Modifier.size(widthDp.dp, RULER_THICK_DP.dp)) {
             val h = size.height
@@ -86,22 +93,23 @@ fun HorizontalRuler(
                 }
             }
         }
-        // مقبض الهامش الأيسر
+        // مقبض الهامش الأيسر (فيزيائي)
         DragHandle(
             color = handleColor,
-            offsetXProvider = { (curLeft * pxPerPt).roundToInt() - handleHalfPx() },
+            offsetXProvider = { (curLeft * pxPerPt).roundToInt() - halfHandlePx },
         ) { dxPx ->
             val deltaPt = dxPx / pxPerPt
             onChangeState((curLeft + deltaPt).coerceIn(0f, pageWidthPt * 0.45f), curRight)
         }
-        // مقبض الهامش الأيمن
+        // مقبض الهامش الأيمن (فيزيائي)
         DragHandle(
             color = handleColor,
-            offsetXProvider = { ((pageWidthPt - curRight) * pxPerPt).roundToInt() - handleHalfPx() },
+            offsetXProvider = { ((pageWidthPt - curRight) * pxPerPt).roundToInt() - halfHandlePx },
         ) { dxPx ->
             val deltaPt = dxPx / pxPerPt
             onChangeState(curLeft, (curRight - deltaPt).coerceIn(0f, pageWidthPt * 0.45f))
         }
+    }
     }
 }
 
@@ -126,6 +134,7 @@ fun VerticalRuler(
     val curTop by rememberUpdatedState(marginTopPt)
     val curBottom by rememberUpdatedState(marginBottomPt)
     val onChangeState by rememberUpdatedState(onChange)
+    val halfHandlePx = (HANDLE_DP * density / 2f).roundToInt()
 
     Box(Modifier.width(RULER_THICK_DP.dp).height(heightDp.dp).background(rulerBg)) {
         Canvas(Modifier.size(RULER_THICK_DP.dp, heightDp.dp)) {
@@ -161,14 +170,14 @@ fun VerticalRuler(
         }
         DragHandleVertical(
             color = handleColor,
-            offsetYProvider = { (curTop * pxPerPt).roundToInt() - handleHalfPx() },
+            offsetYProvider = { (curTop * pxPerPt).roundToInt() - halfHandlePx },
         ) { dyPx ->
             val deltaPt = dyPx / pxPerPt
             onChangeState((curTop + deltaPt).coerceIn(0f, pageHeightPt * 0.4f), curBottom)
         }
         DragHandleVertical(
             color = handleColor,
-            offsetYProvider = { ((pageHeightPt - curBottom) * pxPerPt).roundToInt() - handleHalfPx() },
+            offsetYProvider = { ((pageHeightPt - curBottom) * pxPerPt).roundToInt() - halfHandlePx },
         ) { dyPx ->
             val deltaPt = dyPx / pxPerPt
             onChangeState(curTop, (curBottom - deltaPt).coerceIn(0f, pageHeightPt * 0.4f))
@@ -177,8 +186,6 @@ fun VerticalRuler(
 }
 
 private const val HANDLE_DP = 14
-
-private fun handleHalfPx(): Int = 0 // يُضبط داخل offset عبر dp، نتركه 0 ونستخدم dp مباشرة
 
 @Composable
 private fun DragHandle(

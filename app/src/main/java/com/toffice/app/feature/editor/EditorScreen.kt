@@ -81,6 +81,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalConfiguration
@@ -124,8 +125,11 @@ fun EditorScreen(
     var title by remember { mutableStateOf("") }
     var value by remember { mutableStateOf(TextFieldValue()) }
     var page by remember { mutableStateOf(PageSettings()) }
-    var header by remember { mutableStateOf("") }
-    var footer by remember { mutableStateOf("") }
+    var header by remember { mutableStateOf(TextFieldValue()) }
+    var footer by remember { mutableStateOf(TextFieldValue()) }
+
+    // الحقل المركّز حالياً يحدّد أين يطبّق شريط التنسيق
+    var focusTarget by remember { mutableStateOf(EditField.Body) }
 
     val undoStack = remember { mutableStateListOf<TextFieldValue>() }
     val redoStack = remember { mutableStateListOf<TextFieldValue>() }
@@ -159,8 +163,8 @@ fun EditorScreen(
             val bundle = DocSerializer.parse(ui.json)
             value = TextFieldValue(bundle.body)
             page = bundle.page
-            header = bundle.header
-            footer = bundle.footer
+            header = TextFieldValue(bundle.header)
+            footer = TextFieldValue(bundle.footer)
             initialized = true
         }
     }
@@ -176,19 +180,31 @@ fun EditorScreen(
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument(MIME_DOCX)
     ) { uri ->
-        if (uri != null) viewModel.exportDocx(uri, value.annotatedString, page, header, footer)
+        if (uri != null) viewModel.exportDocx(uri, value.annotatedString, page, header.annotatedString, footer.annotatedString)
     }
     val pdfLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/pdf")
     ) { uri ->
-        if (uri != null) viewModel.exportPdf(uri, value.annotatedString, page, header, footer)
+        if (uri != null) viewModel.exportPdf(uri, value.annotatedString, page, header.annotatedString, footer.annotatedString)
     }
 
     fun persist() {
         if (initialized) {
-            val json = DocSerializer.serialize(DocBundle(value.annotatedString, page, header, footer))
-            viewModel.save(title, json, value.annotatedString, page, header, footer)
+            val json = DocSerializer.serialize(DocBundle(value.annotatedString, page, header.annotatedString, footer.annotatedString))
+            viewModel.save(title, json, value.annotatedString, page, header.annotatedString, footer.annotatedString)
         }
+    }
+
+    // القيمة والتغيير حسب الحقل المركّز (المتن/الترويسة/التذييل)
+    val activeValue = when (focusTarget) {
+        EditField.Body -> value
+        EditField.Header -> header
+        EditField.Footer -> footer
+    }
+    val activeOnChange: (TextFieldValue) -> Unit = when (focusTarget) {
+        EditField.Body -> { v -> update(v) }
+        EditField.Header -> { v -> header = v }
+        EditField.Footer -> { v -> footer = v }
     }
 
     BackHandler { persist(); onBack() }
@@ -253,7 +269,7 @@ fun EditorScreen(
             )
         },
         bottomBar = {
-            if (isCompact) FormatToolbar(value = value, onChange = { update(it) })
+            if (isCompact) FormatToolbar(value = activeValue, onChange = activeOnChange)
         },
     ) { padding ->
         Column(
@@ -261,7 +277,7 @@ fun EditorScreen(
                 .fillMaxSize()
                 .padding(top = padding.calculateTopPadding(), bottom = padding.calculateBottomPadding()),
         ) {
-            if (!isCompact) FormatToolbar(value = value, onChange = { update(it) })
+            if (!isCompact) FormatToolbar(value = activeValue, onChange = activeOnChange)
 
             if (showPageSetup) {
                 PageSetupDialog(
@@ -284,6 +300,12 @@ fun EditorScreen(
                     val scale = sheetWidthDp.value / page.pageWidthPt
                     val pageHeightDp = page.pageHeightPt * scale
 
+                    // اتجاه المسطرة يتبع اتجاه الفقرة الحالية للمتن (تلقائي ← اتجاه الصفحة)
+                    val rulerRtl = when (RichTextOps.currentDirection(value)) {
+                        TextDirection.Rtl -> true
+                        TextDirection.Ltr -> false
+                        else -> page.rtlPage
+                    }
                     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
                         Row {
                             Spacer(Modifier.width(rulerThick + gap))
@@ -292,7 +314,7 @@ fun EditorScreen(
                                 marginLeftPt = page.marginLeftPt,
                                 marginRightPt = page.marginRightPt,
                                 scale = scale,
-                                rtl = page.rtlPage,
+                                rtl = rulerRtl,
                                 onChange = { l, r -> page = page.copy(marginLeftPt = l, marginRightPt = r) },
                             )
                         }
@@ -318,6 +340,7 @@ fun EditorScreen(
                                 onHeaderChange = { header = it },
                                 footer = footer,
                                 onFooterChange = { footer = it },
+                                onFocusField = { focusTarget = it },
                             )
                         }
                         Spacer(Modifier.height(24.dp))
@@ -344,10 +367,11 @@ private fun PageSheet(
     scale: Float,
     value: TextFieldValue,
     onValueChange: (TextFieldValue) -> Unit,
-    header: String,
-    onHeaderChange: (String) -> Unit,
-    footer: String,
-    onFooterChange: (String) -> Unit,
+    header: TextFieldValue,
+    onHeaderChange: (TextFieldValue) -> Unit,
+    footer: TextFieldValue,
+    onFooterChange: (TextFieldValue) -> Unit,
+    onFocusField: (EditField) -> Unit,
 ) {
     val mlDp = page.marginLeftPt * scale
     val mrDp = page.marginRightPt * scale
@@ -369,7 +393,7 @@ private fun PageSheet(
                 .absolutePadding(left = mlDp.dp, right = mrDp.dp, bottom = 2.dp),
             contentAlignment = Alignment.BottomCenter,
         ) {
-            PlainEditField(header, onHeaderChange, "الترويسة", Color(0xFF888888), Modifier.fillMaxWidth())
+            RichEditField(header, onHeaderChange, "الترويسة", Modifier.fillMaxWidth()) { onFocusField(EditField.Header) }
         }
         // المتن
         BasicTextField(
@@ -378,7 +402,8 @@ private fun PageSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = bodyMin.dp)
-                .absolutePadding(left = mlDp.dp, right = mrDp.dp),
+                .absolutePadding(left = mlDp.dp, right = mrDp.dp)
+                .onFocusChanged { if (it.isFocused) onFocusField(EditField.Body) },
             textStyle = TextStyle(fontSize = 16.sp, color = Color(0xFF1A1A1A)),
             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
             decorationBox = { inner ->
@@ -395,7 +420,7 @@ private fun PageSheet(
                 .height(mbDp.dp)
                 .absolutePadding(left = mlDp.dp, right = mrDp.dp, top = 2.dp, bottom = 2.dp),
         ) {
-            PlainEditField(footer, onFooterChange, "التذييل", Color(0xFF888888), Modifier.align(Alignment.TopCenter))
+            RichEditField(footer, onFooterChange, "التذييل", Modifier.align(Alignment.TopCenter)) { onFocusField(EditField.Footer) }
             if (page.showPageNumber) {
                 Text(
                     "١",
@@ -409,17 +434,29 @@ private fun PageSheet(
     }
 }
 
+/** الحقل القابل للتنسيق: المتن أو الترويسة أو التذييل. */
+enum class EditField { Body, Header, Footer }
+
+/** حقل ترويسة/تذييل منسّق (يدعم نفس تنسيق الخطوط عبر شريط الأدوات عند تركيزه). */
 @Composable
-private fun PlainEditField(value: String, onChange: (String) -> Unit, placeholder: String, color: Color, modifier: Modifier = Modifier) {
+private fun RichEditField(
+    value: TextFieldValue,
+    onChange: (TextFieldValue) -> Unit,
+    placeholder: String,
+    modifier: Modifier = Modifier,
+    onFocus: () -> Unit,
+) {
     BasicTextField(
         value = value,
         onValueChange = onChange,
-        modifier = modifier.fillMaxWidth(),
-        textStyle = TextStyle(fontSize = 12.sp, color = color, textAlign = TextAlign.Right),
-        cursorBrush = SolidColor(color),
+        modifier = modifier
+            .fillMaxWidth()
+            .onFocusChanged { if (it.isFocused) onFocus() },
+        textStyle = TextStyle(fontSize = 13.sp, color = Color(0xFF444444), textAlign = TextAlign.Right),
+        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
         decorationBox = { inner ->
-            if (value.isEmpty()) {
-                Text(placeholder, color = Color(0xFFCCCCCC), fontSize = 12.sp, textAlign = TextAlign.Right, modifier = Modifier.fillMaxWidth())
+            if (value.text.isEmpty()) {
+                Text(placeholder, color = Color(0xFFCCCCCC), fontSize = 13.sp, textAlign = TextAlign.Right, modifier = Modifier.fillMaxWidth())
             }
             inner()
         },
