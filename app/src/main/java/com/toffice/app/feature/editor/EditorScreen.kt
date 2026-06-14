@@ -103,9 +103,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
@@ -473,7 +476,7 @@ private fun PageSheet(
     val bodyMin = (pageHeightDp - mtDp - mbDp).coerceAtLeast(80f)
 
     val density = LocalDensity.current.density
-    val breakColor = MaterialTheme.colorScheme.outline
+    val dashColor = MaterialTheme.colorScheme.outlineVariant
     Column(
         Modifier
             .width(widthDp)
@@ -482,11 +485,19 @@ private fun PageSheet(
             .onSizeChanged { onSheetHeight(it.height) }
             .drawWithContent {
                 drawContent()
-                // خطوط فاصل الصفحات + رقم الصفحة
+                val dash = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 7f))
+                // خطوط توضيح الترويسة (تحت الهامش العلوي) والتذييل (فوق الهامش السفلي)
+                val topY = mtDp * density
+                val botY = size.height - mbDp * density
+                drawLine(dashColor, Offset(mlDp * density, topY), Offset(size.width - mrDp * density, topY), strokeWidth = 1f, pathEffect = dash)
+                if (botY > topY) {
+                    drawLine(dashColor, Offset(mlDp * density, botY), Offset(size.width - mrDp * density, botY), strokeWidth = 1f, pathEffect = dash)
+                }
+                // فواصل صفحات ثلاثية الأبعاد (ظل + فجوة) مع شارة «صفحة X من Y»
                 val pageH = pageHeightDp * density
-                val dash = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(12f, 8f))
-                val paint = android.graphics.Paint().apply {
-                    color = android.graphics.Color.argb(150, 120, 120, 120)
+                val totalLabel = arabicDigits(pageCount)
+                val chip = android.graphics.Paint().apply {
+                    color = android.graphics.Color.WHITE
                     textSize = 10f * density
                     isAntiAlias = true
                     textAlign = android.graphics.Paint.Align.CENTER
@@ -494,14 +505,38 @@ private fun PageSheet(
                 for (p in 1 until pageCount) {
                     val y = p * pageH
                     if (y >= size.height) break
-                    drawLine(
-                        breakColor,
-                        androidx.compose.ui.geometry.Offset(0f, y),
-                        androidx.compose.ui.geometry.Offset(size.width, y),
-                        strokeWidth = 1f,
-                        pathEffect = dash,
+                    // ظل أسفل الصفحة العليا
+                    drawRect(
+                        brush = Brush.verticalGradient(
+                            listOf(Color.Transparent, Color(0x40000000)),
+                            startY = y - 9f * density, endY = y,
+                        ),
+                        topLeft = Offset(0f, y - 9f * density),
+                        size = Size(size.width, 9f * density),
                     )
-                    drawContext.canvas.nativeCanvas.drawText("صفحة ${p + 1}", size.width / 2f, y - 4f * density, paint)
+                    drawLine(Color(0x55000000), Offset(0f, y), Offset(size.width, y), strokeWidth = 1.2f * density)
+                    // إضاءة أعلى الصفحة السفلى
+                    drawRect(
+                        brush = Brush.verticalGradient(
+                            listOf(Color(0x18000000), Color.Transparent),
+                            startY = y, endY = y + 7f * density,
+                        ),
+                        topLeft = Offset(0f, y),
+                        size = Size(size.width, 7f * density),
+                    )
+                    // شارة رقم الصفحة
+                    val label = "صفحة ${arabicDigits(p + 1)} من $totalLabel"
+                    val tw = chip.measureText(label)
+                    val chipW = tw + 16f * density
+                    val chipH = 16f * density
+                    val cx = size.width / 2f
+                    drawRoundRect(
+                        color = Color(0xCC424242),
+                        topLeft = Offset(cx - chipW / 2f, y - chipH - 2f * density),
+                        size = Size(chipW, chipH),
+                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(chipH / 2f, chipH / 2f),
+                    )
+                    drawContext.canvas.nativeCanvas.drawText(label, cx, y - 6f * density, chip)
                 }
             },
     ) {
@@ -557,7 +592,7 @@ private fun PageSheet(
             )
             if (page.showPageNumber) {
                 Text(
-                    "١",
+                    "صفحة ١ من ${arabicDigits(pageCount)}",
                     color = Color(0xFF555555),
                     fontSize = 12.sp,
                     textAlign = TextAlign.Center,
@@ -566,6 +601,12 @@ private fun PageSheet(
             }
         }
     }
+}
+
+/** يحوّل عدداً إلى أرقام عربية للعرض. */
+fun arabicDigits(n: Int): String {
+    val ar = "٠١٢٣٤٥٦٧٨٩"
+    return n.toString().map { if (it in '0'..'9') ar[it - '0'] else it }.joinToString("")
 }
 
 /** الحقل القابل للتنسيق: المتن أو الترويسة أو التذييل. */
