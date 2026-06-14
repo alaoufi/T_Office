@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">مكتبي</string>
+
+    <!-- الوحدات -->
+    <string name="module_tasks">المهام</string>
+    <string name="module_notes">الملاحظات</string>
+    <string name="module_calendar">المواعيد</string>
+    <string name="module_expenses">المصروفات</string>
+    <string name="module_documents">المستندات</string>
+    <string name="module_editor">محرر النصوص</string>
+    <string name="module_backup">النسخ الاحتياطي</string>
+    <string name="module_settings">الإعدادات</string>
+
+    <string name="dashboard_title">مكتبي</string>
+    <string name="dashboard_subtitle">مكتبك الشخصي بين يديك</string>
+
+    <!-- عام -->
+    <string name="action_add">إضافة</string>
+    <string name="action_save">حفظ</string>
+    <string name="action_delete">حذف</string>
+    <string name="action_cancel">إلغاء</string>
+    <string name="action_back">رجوع</string>
+    <string name="empty_generic">لا توجد عناصر بعد</string>
+
+    <!-- المهام -->
+    <string name="tasks_empty">لا توجد مهام — أضف مهمتك الأولى</string>
+    <string name="task_title_hint">عنوان المهمة</string>
+    <string name="task_notes_hint">تفاصيل (اختياري)</string>
+    <string name="task_new">مهمة جديدة</string>
+    <string name="task_edit">تعديل المهمة</string>
+</resources>
