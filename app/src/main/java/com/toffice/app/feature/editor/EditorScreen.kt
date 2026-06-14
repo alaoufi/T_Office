@@ -6,6 +6,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -86,8 +87,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -135,6 +139,8 @@ fun EditorScreen(
 
     // الحقل المركّز حالياً يحدّد أين يطبّق شريط التنسيق
     var focusTarget by remember { mutableStateOf(EditField.Body) }
+    // الترويسة/التذييل قيد التحرير (null = مقفلة، تُفتح بنقر مزدوج فقط)
+    var hfEditing by remember { mutableStateOf<EditField?>(null) }
 
     val undoStack = remember { mutableStateListOf<TextFieldValue>() }
     val redoStack = remember { mutableStateListOf<TextFieldValue>() }
@@ -346,7 +352,9 @@ fun EditorScreen(
                                 onHeaderChange = { header = it },
                                 footer = footer,
                                 onFooterChange = { footer = it },
-                                onFocusField = { focusTarget = it },
+                                hfEditing = hfEditing,
+                                onStartEditHF = { field -> hfEditing = field; focusTarget = field },
+                                onBodyFocus = { focusTarget = EditField.Body; hfEditing = null },
                             )
                         }
                         Spacer(Modifier.height(24.dp))
@@ -377,7 +385,9 @@ private fun PageSheet(
     onHeaderChange: (TextFieldValue) -> Unit,
     footer: TextFieldValue,
     onFooterChange: (TextFieldValue) -> Unit,
-    onFocusField: (EditField) -> Unit,
+    hfEditing: EditField?,
+    onStartEditHF: (EditField) -> Unit,
+    onBodyFocus: () -> Unit,
 ) {
     val mlDp = page.marginLeftPt * scale
     val mrDp = page.marginRightPt * scale
@@ -399,7 +409,14 @@ private fun PageSheet(
                 .absolutePadding(left = mlDp.dp, right = mrDp.dp, bottom = 2.dp),
             contentAlignment = Alignment.BottomCenter,
         ) {
-            RichEditField(header, onHeaderChange, "الترويسة", Modifier.fillMaxWidth()) { onFocusField(EditField.Header) }
+            HeaderFooterField(
+                value = header,
+                onChange = onHeaderChange,
+                placeholder = "الترويسة (نقر مزدوج للتحرير)",
+                editing = hfEditing == EditField.Header,
+                onStartEditing = { onStartEditHF(EditField.Header) },
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
         // المتن
         BasicTextField(
@@ -409,7 +426,7 @@ private fun PageSheet(
                 .fillMaxWidth()
                 .heightIn(min = bodyMin.dp)
                 .absolutePadding(left = mlDp.dp, right = mrDp.dp)
-                .onFocusChanged { if (it.isFocused) onFocusField(EditField.Body) },
+                .onFocusChanged { if (it.isFocused) onBodyFocus() },
             textStyle = TextStyle(fontSize = 16.sp, color = Color(0xFF1A1A1A)),
             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
             decorationBox = { inner ->
@@ -426,7 +443,14 @@ private fun PageSheet(
                 .height(mbDp.dp)
                 .absolutePadding(left = mlDp.dp, right = mrDp.dp, top = 2.dp, bottom = 2.dp),
         ) {
-            RichEditField(footer, onFooterChange, "التذييل", Modifier.align(Alignment.TopCenter)) { onFocusField(EditField.Footer) }
+            HeaderFooterField(
+                value = footer,
+                onChange = onFooterChange,
+                placeholder = "التذييل (نقر مزدوج للتحرير)",
+                editing = hfEditing == EditField.Footer,
+                onStartEditing = { onStartEditHF(EditField.Footer) },
+                modifier = Modifier.align(Alignment.TopCenter),
+            )
             if (page.showPageNumber) {
                 Text(
                     "١",
@@ -443,30 +467,51 @@ private fun PageSheet(
 /** الحقل القابل للتنسيق: المتن أو الترويسة أو التذييل. */
 enum class EditField { Body, Header, Footer }
 
-/** حقل ترويسة/تذييل منسّق (يدعم نفس تنسيق الخطوط عبر شريط الأدوات عند تركيزه). */
+/**
+ * حقل ترويسة/تذييل: مقفل وخافت افتراضياً، ولا يُحرَّر إلا بنقر مزدوج (مثل Word/WPS).
+ * عند التحرير يخضع لأدوات التنسيق (لأنه يصبح الحقل المركّز).
+ */
 @Composable
-private fun RichEditField(
+private fun HeaderFooterField(
     value: TextFieldValue,
     onChange: (TextFieldValue) -> Unit,
     placeholder: String,
+    editing: Boolean,
+    onStartEditing: () -> Unit,
     modifier: Modifier = Modifier,
-    onFocus: () -> Unit,
 ) {
-    BasicTextField(
-        value = value,
-        onValueChange = onChange,
-        modifier = modifier
+    if (editing) {
+        val focusRequester = remember { FocusRequester() }
+        LaunchedEffect(Unit) { focusRequester.requestFocus() }
+        BasicTextField(
+            value = value,
+            onValueChange = onChange,
+            modifier = modifier
+                .fillMaxWidth()
+                .focusRequester(focusRequester),
+            textStyle = TextStyle(fontSize = 13.sp, color = Color(0xFF444444), textAlign = TextAlign.Right),
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+            decorationBox = { inner ->
+                if (value.text.isEmpty()) {
+                    Text(placeholder, color = Color(0xFFCCCCCC), fontSize = 13.sp, textAlign = TextAlign.Right, modifier = Modifier.fillMaxWidth())
+                }
+                inner()
+            },
+        )
+        return
+    }
+    // عرض مقفل: نقر مزدوج للتحرير
+    Box(
+        modifier
             .fillMaxWidth()
-            .onFocusChanged { if (it.isFocused) onFocus() },
-        textStyle = TextStyle(fontSize = 13.sp, color = Color(0xFF444444), textAlign = TextAlign.Right),
-        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-        decorationBox = { inner ->
-            if (value.text.isEmpty()) {
-                Text(placeholder, color = Color(0xFFCCCCCC), fontSize = 13.sp, textAlign = TextAlign.Right, modifier = Modifier.fillMaxWidth())
-            }
-            inner()
-        },
-    )
+            .pointerInput(Unit) { detectTapGestures(onDoubleTap = { onStartEditing() }) },
+    ) {
+        if (value.text.isEmpty()) {
+            Text(placeholder, color = Color(0xFFCCCCCC), fontSize = 13.sp, textAlign = TextAlign.Right, modifier = Modifier.fillMaxWidth())
+        } else {
+            Text(value.annotatedString, fontSize = 13.sp, color = Color(0xFF777777), textAlign = TextAlign.Right, modifier = Modifier.fillMaxWidth())
+        }
+    }
 }
 
 @Composable
