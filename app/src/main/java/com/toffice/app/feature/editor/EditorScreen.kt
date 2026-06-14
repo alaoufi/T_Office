@@ -28,14 +28,20 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.FormatAlignLeft
 import androidx.compose.material.icons.automirrored.filled.FormatAlignRight
+import androidx.compose.material.icons.automirrored.filled.Redo
+import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.FormatAlignCenter
 import androidx.compose.material.icons.filled.FormatAlignJustify
 import androidx.compose.material.icons.filled.FormatBold
+import androidx.compose.material.icons.filled.FormatColorFill
+import androidx.compose.material.icons.filled.FormatColorReset
 import androidx.compose.material.icons.filled.FormatItalic
 import androidx.compose.material.icons.filled.FormatUnderlined
+import androidx.compose.material.icons.filled.Numbers
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.StrikethroughS
 import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -52,6 +58,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -96,6 +103,32 @@ fun EditorScreen(
     var page by remember { mutableStateOf(PageSettings()) }
     var header by remember { mutableStateOf("") }
     var footer by remember { mutableStateOf("") }
+
+    val undoStack = remember { mutableStateListOf<TextFieldValue>() }
+    val redoStack = remember { mutableStateListOf<TextFieldValue>() }
+
+    fun update(new: TextFieldValue) {
+        if (new.annotatedString != value.annotatedString) {
+            undoStack.add(value)
+            if (undoStack.size > 120) undoStack.removeAt(0)
+            redoStack.clear()
+        }
+        value = new
+    }
+
+    fun undo() {
+        if (undoStack.isNotEmpty()) {
+            redoStack.add(value)
+            value = undoStack.removeAt(undoStack.lastIndex)
+        }
+    }
+
+    fun redo() {
+        if (redoStack.isNotEmpty()) {
+            undoStack.add(value)
+            value = redoStack.removeAt(redoStack.lastIndex)
+        }
+    }
 
     LaunchedEffect(ui.isLoading) {
         if (!ui.isLoading && !initialized) {
@@ -149,6 +182,20 @@ fun EditorScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = { undo() }, enabled = undoStack.isNotEmpty()) {
+                        Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = "تراجع")
+                    }
+                    IconButton(onClick = { redo() }, enabled = redoStack.isNotEmpty()) {
+                        Icon(Icons.AutoMirrored.Filled.Redo, contentDescription = "إعادة")
+                    }
+                    IconButton(onClick = { page = page.copy(showPageNumber = !page.showPageNumber) }) {
+                        Icon(
+                            Icons.Default.Numbers,
+                            contentDescription = "ترقيم الصفحات",
+                            tint = if (page.showPageNumber) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     IconButton(onClick = { persist() }) { Icon(Icons.Default.Save, contentDescription = "حفظ") }
                     IconButton(onClick = { exportLauncher.launch("${title.ifBlank { "مستند" }}.docx") }) {
                         Icon(Icons.Default.Upload, contentDescription = "تصدير Word")
@@ -158,7 +205,7 @@ fun EditorScreen(
         },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(top = padding.calculateTopPadding())) {
-            FormatToolbar(value = value, onChange = { value = it })
+            FormatToolbar(value = value, onChange = { update(it) })
 
             CompositionLocalProviderLtr {
                 BoxWithConstraints(
@@ -201,7 +248,7 @@ fun EditorScreen(
                                 page = page,
                                 scale = scale,
                                 value = value,
-                                onValueChange = { value = it },
+                                onValueChange = { update(it) },
                                 header = header,
                                 onHeaderChange = { header = it },
                                 footer = footer,
@@ -256,7 +303,7 @@ private fun PageSheet(
                 .padding(start = mlDp.dp, end = mrDp.dp, bottom = 2.dp),
             contentAlignment = Alignment.BottomCenter,
         ) {
-            PlainEditField(header, onHeaderChange, "الترويسة", Color(0xFF888888))
+            PlainEditField(header, onHeaderChange, "الترويسة", Color(0xFF888888), Modifier.fillMaxWidth())
         }
         // المتن
         BasicTextField(
@@ -275,25 +322,33 @@ private fun PageSheet(
                 inner()
             },
         )
-        // منطقة الهامش السفلي + التذييل
+        // منطقة الهامش السفلي + التذييل + رقم الصفحة
         Box(
             Modifier
                 .fillMaxWidth()
                 .height(mbDp.dp)
-                .padding(start = mlDp.dp, end = mrDp.dp, top = 2.dp),
-            contentAlignment = Alignment.TopCenter,
+                .padding(start = mlDp.dp, end = mrDp.dp, top = 2.dp, bottom = 2.dp),
         ) {
-            PlainEditField(footer, onFooterChange, "التذييل", Color(0xFF888888))
+            PlainEditField(footer, onFooterChange, "التذييل", Color(0xFF888888), Modifier.align(Alignment.TopCenter))
+            if (page.showPageNumber) {
+                Text(
+                    "١",
+                    color = Color(0xFF555555),
+                    fontSize = 12.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun PlainEditField(value: String, onChange: (String) -> Unit, placeholder: String, color: Color) {
+private fun PlainEditField(value: String, onChange: (String) -> Unit, placeholder: String, color: Color, modifier: Modifier = Modifier) {
     BasicTextField(
         value = value,
         onValueChange = onChange,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         textStyle = TextStyle(fontSize = 12.sp, color = color, textAlign = TextAlign.Right),
         cursorBrush = SolidColor(color),
         decorationBox = { inner ->
@@ -318,6 +373,7 @@ private fun FormatToolbar(value: TextFieldValue, onChange: (TextFieldValue) -> U
         ToolToggle(Icons.Default.FormatBold, "غامق", cur.bold) { onChange(RichTextOps.toggleBold(value)) }
         ToolToggle(Icons.Default.FormatItalic, "مائل", cur.italic) { onChange(RichTextOps.toggleItalic(value)) }
         ToolToggle(Icons.Default.FormatUnderlined, "تسطير", cur.underline) { onChange(RichTextOps.toggleUnderline(value)) }
+        ToolToggle(Icons.Default.StrikethroughS, "يتوسطه خط", cur.strike) { onChange(RichTextOps.toggleStrike(value)) }
         ToolDivider()
         ToolButton(Icons.AutoMirrored.Filled.FormatAlignRight, "يمين") { onChange(RichTextOps.setAlign(value, TextAlign.Right)) }
         ToolButton(Icons.Default.FormatAlignCenter, "توسيط") { onChange(RichTextOps.setAlign(value, TextAlign.Center)) }
@@ -329,6 +385,9 @@ private fun FormatToolbar(value: TextFieldValue, onChange: (TextFieldValue) -> U
         ToolButton(Icons.Default.Add, "تكبير") { onChange(RichTextOps.setSize(value, cur.sizeSp + 2)) }
         ToolDivider()
         SWATCHES.forEach { argb -> ColorSwatch(Color(argb)) { onChange(RichTextOps.setColor(value, argb)) } }
+        ToolDivider()
+        ToolButton(Icons.Default.FormatColorFill, "تظليل") { onChange(RichTextOps.setHighlight(value, 0xFFFFEB3B.toInt())) }
+        ToolButton(Icons.Default.FormatColorReset, "إزالة التظليل") { onChange(RichTextOps.setHighlight(value, 0)) }
     }
 }
 

@@ -19,15 +19,15 @@ object DocxWriter {
         footer: String = "",
     ) {
         val hasHeader = header.isNotBlank()
-        val hasFooter = footer.isNotBlank()
+        val hasFooter = footer.isNotBlank() || page.showPageNumber
 
         ZipOutputStream(out).use { zip ->
             zip.entry("[Content_Types].xml", contentTypes(hasHeader, hasFooter))
             zip.entry("_rels/.rels", RELS)
             zip.entry("word/_rels/document.xml.rels", documentRels(hasHeader, hasFooter))
             zip.entry("word/document.xml", buildDocument(paragraphs, page, hasHeader, hasFooter))
-            if (hasHeader) zip.entry("word/header1.xml", headerFooterPart("hdr", header))
-            if (hasFooter) zip.entry("word/footer1.xml", headerFooterPart("ftr", footer))
+            if (hasHeader) zip.entry("word/header1.xml", headerFooterPart("hdr", header, false))
+            if (hasFooter) zip.entry("word/footer1.xml", headerFooterPart("ftr", footer, page.showPageNumber))
         }
     }
 
@@ -119,12 +119,17 @@ object DocxWriter {
         if (r.bold) sb.append("<w:b/><w:bCs/>")
         if (r.italic) sb.append("<w:i/><w:iCs/>")
         if (r.underline) sb.append("<w:u w:val=\"single\"/>")
+        if (r.strike) sb.append("<w:strike/>")
         val halfPoints = (r.sizeSp * 2).coerceAtLeast(2)
         sb.append("<w:sz w:val=\"").append(halfPoints).append("\"/>")
         sb.append("<w:szCs w:val=\"").append(halfPoints).append("\"/>")
         if (r.colorArgb != 0) {
             val hex = String.format("%06X", r.colorArgb and 0xFFFFFF)
             sb.append("<w:color w:val=\"").append(hex).append("\"/>")
+        }
+        if (r.highlightArgb != 0) {
+            val hex = String.format("%06X", r.highlightArgb and 0xFFFFFF)
+            sb.append("<w:shd w:val=\"clear\" w:color=\"auto\" w:fill=\"").append(hex).append("\"/>")
         }
         sb.append("<w:rtl/>")
         sb.append("</w:rPr>")
@@ -133,15 +138,26 @@ object DocxWriter {
         return sb.toString()
     }
 
-    private fun headerFooterPart(tag: String, text: String): String {
+    private fun headerFooterPart(tag: String, text: String, pageNumber: Boolean): String {
         val sb = StringBuilder()
         sb.append("""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>""")
         sb.append("<w:").append(tag)
             .append(" xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\">")
-        for (line in text.split('\n')) {
-            sb.append("<w:p><w:pPr><w:bidi/><w:jc w:val=\"right\"/></w:pPr>")
-            sb.append("<w:r><w:rPr><w:rtl/></w:rPr><w:t xml:space=\"preserve\">")
-                .append(escape(line)).append("</w:t></w:r></w:p>")
+        if (text.isNotBlank()) {
+            for (line in text.split('\n')) {
+                sb.append("<w:p><w:pPr><w:bidi/><w:jc w:val=\"right\"/></w:pPr>")
+                sb.append("<w:r><w:rPr><w:rtl/></w:rPr><w:t xml:space=\"preserve\">")
+                    .append(escape(line)).append("</w:t></w:r></w:p>")
+            }
+        }
+        if (pageNumber) {
+            // فقرة رقم الصفحة (حقل PAGE) في المنتصف
+            sb.append("<w:p><w:pPr><w:jc w:val=\"center\"/></w:pPr>")
+            sb.append("<w:fldSimple w:instr=\" PAGE \"><w:r><w:t>1</w:t></w:r></w:fldSimple>")
+            sb.append("</w:p>")
+        }
+        if (text.isBlank() && !pageNumber) {
+            sb.append("<w:p/>")
         }
         sb.append("</w:").append(tag).append(">")
         return sb.toString()

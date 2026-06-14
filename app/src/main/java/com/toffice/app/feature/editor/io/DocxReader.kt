@@ -27,11 +27,18 @@ object DocxReader {
         val headerXml = parts.entries.firstOrNull { it.key.matches(Regex("word/header\\d*\\.xml")) }?.value
         val footerXml = parts.entries.firstOrNull { it.key.matches(Regex("word/footer\\d*\\.xml")) }?.value
 
+        val showPageNumber = footerXml?.contains("PAGE") == true
+        var footerText = footerXml?.let { plainText(it) } ?: ""
+        if (showPageNumber) {
+            // إزالة رقم الصفحة المخزّن مؤقتاً من نص التذييل
+            footerText = footerText.lines().filterNot { it.trim().matches(Regex("\\d+")) }.joinToString("\n").trim()
+        }
+
         return DocBundle(
             body = parsed.first,
-            page = parsed.second,
+            page = parsed.second.copy(showPageNumber = showPageNumber),
             header = headerXml?.let { plainText(it) } ?: "",
-            footer = footerXml?.let { plainText(it) } ?: "",
+            footer = footerText,
         )
     }
 
@@ -62,13 +69,13 @@ object DocxReader {
         var curAlign = TextAlign.Right
         var inT = false
 
-        var rb = false; var ri = false; var ru = false
-        var rsz = DEFAULT_FONT_SP; var rc = COLOR_DEFAULT
+        var rb = false; var ri = false; var ru = false; var rst = false
+        var rsz = DEFAULT_FONT_SP; var rc = COLOR_DEFAULT; var rhl = COLOR_DEFAULT
 
         fun appendText(s: String) {
             for (c in s) {
                 text.append(c)
-                attrs.add(CharAttrs(rb, ri, ru, rsz, rc))
+                attrs.add(CharAttrs(rb, ri, ru, rst, rsz, rc, rhl))
             }
         }
 
@@ -82,15 +89,21 @@ object DocxReader {
                         curAlign = TextAlign.Right
                     }
                     "jc" -> curAlign = mapAlign(attr(parser, "val"))
-                    "r" -> { rb = false; ri = false; ru = false; rsz = DEFAULT_FONT_SP; rc = COLOR_DEFAULT }
+                    "r" -> { rb = false; ri = false; ru = false; rst = false; rsz = DEFAULT_FONT_SP; rc = COLOR_DEFAULT; rhl = COLOR_DEFAULT }
                     "b" -> rb = boolOn(attr(parser, "val"))
                     "i" -> ri = boolOn(attr(parser, "val"))
                     "u" -> ru = (attr(parser, "val") ?: "single") != "none"
+                    "strike" -> rst = boolOn(attr(parser, "val"))
                     "sz" -> attr(parser, "val")?.toIntOrNull()?.let { rsz = (it / 2).coerceIn(8, 96) }
                     "color" -> {
                         val v = attr(parser, "val")
                         if (v != null && v != "auto") parseHex(v)?.let { rc = it }
                     }
+                    "shd" -> {
+                        val v = attr(parser, "fill")
+                        if (v != null && v != "auto") parseHex(v)?.let { rhl = it }
+                    }
+                    "highlight" -> namedColor(attr(parser, "val"))?.let { rhl = it }
                     "pgSz" -> {
                         attr(parser, "w")?.toIntOrNull()?.let { page = page.copy(pageWidthPt = it.twipsToPt()) }
                         attr(parser, "h")?.toIntOrNull()?.let { page = page.copy(pageHeightPt = it.twipsToPt()) }
@@ -166,5 +179,17 @@ object DocxReader {
         (0xFF000000.toInt()) or (v.removePrefix("#").toInt(16) and 0xFFFFFF)
     } catch (e: Exception) {
         null
+    }
+
+    /** ألوان التظليل المسماة في Word -> ARGB. */
+    private fun namedColor(v: String?): Int? = when (v) {
+        "yellow" -> 0xFFFFFF00.toInt()
+        "green" -> 0xFF00FF00.toInt()
+        "cyan" -> 0xFF00FFFF.toInt()
+        "magenta" -> 0xFFFF00FF.toInt()
+        "red" -> 0xFFFF0000.toInt()
+        "blue" -> 0xFF0000FF.toInt()
+        "darkGray", "lightGray" -> 0xFFC0C0C0.toInt()
+        else -> null
     }
 }

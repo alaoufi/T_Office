@@ -47,6 +47,23 @@ object RichTextOps {
         }
     }
 
+    fun toggleStrike(v: TextFieldValue): TextFieldValue {
+        val (s, e) = bounds(v)
+        if (s >= e) return v
+        return rebuild(v) { attrs, _ ->
+            val all = (s until e).all { attrs[it].strike }
+            for (i in s until e) attrs[i] = attrs[i].copy(strike = !all)
+        }
+    }
+
+    fun setHighlight(v: TextFieldValue, colorArgb: Int): TextFieldValue {
+        val (s, e) = bounds(v)
+        if (s >= e) return v
+        return rebuild(v) { attrs, _ ->
+            for (i in s until e) attrs[i] = attrs[i].copy(highlightArgb = colorArgb)
+        }
+    }
+
     fun setSize(v: TextFieldValue, sizeSp: Int): TextFieldValue {
         val (s, e) = bounds(v)
         if (s >= e) return v

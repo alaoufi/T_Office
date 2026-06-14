@@ -18,6 +18,7 @@ data class PageSettings(
     val marginRightPt: Float = 72f,
     val marginTopPt: Float = 72f,
     val marginBottomPt: Float = 72f,
+    val showPageNumber: Boolean = false,
 )
 
 /** المستند الكامل: المتن المنسّق + إعدادات الصفحة + الترويسة + التذييل. */
@@ -40,6 +41,7 @@ object DocSerializer {
             .put("mR", bundle.page.marginRightPt.toDouble())
             .put("mT", bundle.page.marginTopPt.toDouble())
             .put("mB", bundle.page.marginBottomPt.toDouble())
+            .put("pn", bundle.page.showPageNumber)
         return JSONObject()
             .put("body", bodyObj)
             .put("page", page)
@@ -64,6 +66,7 @@ object DocSerializer {
             marginRightPt = p.optDouble("mR", 72.0).toFloat(),
             marginTopPt = p.optDouble("mT", 72.0).toFloat(),
             marginBottomPt = p.optDouble("mB", 72.0).toFloat(),
+            showPageNumber = p.optBoolean("pn", false),
         ) else PageSettings()
         return DocBundle(
             body = body,

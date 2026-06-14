@@ -26,19 +26,28 @@ data class CharAttrs(
     val bold: Boolean = false,
     val italic: Boolean = false,
     val underline: Boolean = false,
+    val strike: Boolean = false,
     val sizeSp: Int = DEFAULT_FONT_SP,
     val colorArgb: Int = COLOR_DEFAULT,
+    val highlightArgb: Int = COLOR_DEFAULT,
 ) {
     fun isDefault(): Boolean =
-        !bold && !italic && !underline && sizeSp == DEFAULT_FONT_SP && colorArgb == COLOR_DEFAULT
+        !bold && !italic && !underline && !strike &&
+            sizeSp == DEFAULT_FONT_SP && colorArgb == COLOR_DEFAULT && highlightArgb == COLOR_DEFAULT
 
-    fun toSpanStyle(): SpanStyle = SpanStyle(
-        fontWeight = if (bold) FontWeight.Bold else null,
-        fontStyle = if (italic) FontStyle.Italic else null,
-        textDecoration = if (underline) TextDecoration.Underline else null,
-        fontSize = sizeSp.sp,
-        color = if (colorArgb != COLOR_DEFAULT) Color(colorArgb) else Color.Unspecified,
-    )
+    fun toSpanStyle(): SpanStyle {
+        val decos = mutableListOf<TextDecoration>()
+        if (underline) decos.add(TextDecoration.Underline)
+        if (strike) decos.add(TextDecoration.LineThrough)
+        return SpanStyle(
+            fontWeight = if (bold) FontWeight.Bold else null,
+            fontStyle = if (italic) FontStyle.Italic else null,
+            textDecoration = if (decos.isEmpty()) null else TextDecoration.combine(decos),
+            fontSize = sizeSp.sp,
+            color = if (colorArgb != COLOR_DEFAULT) Color(colorArgb) else Color.Unspecified,
+            background = if (highlightArgb != COLOR_DEFAULT) Color(highlightArgb) else Color.Unspecified,
+        )
+    }
 }
 
 // ---- محاذاة الفقرة <-> رقم ----
@@ -81,9 +90,13 @@ fun AnnotatedString.toCharAttrs(): MutableList<CharAttrs> {
             var a = attrs[i]
             if (s.fontWeight != null && s.fontWeight!!.weight >= FontWeight.Bold.weight) a = a.copy(bold = true)
             if (s.fontStyle == FontStyle.Italic) a = a.copy(italic = true)
-            if (s.textDecoration == TextDecoration.Underline) a = a.copy(underline = true)
+            s.textDecoration?.let { d ->
+                if (d.contains(TextDecoration.Underline)) a = a.copy(underline = true)
+                if (d.contains(TextDecoration.LineThrough)) a = a.copy(strike = true)
+            }
             if (s.fontSize != TextUnit.Unspecified) a = a.copy(sizeSp = s.fontSize.value.toInt())
             if (s.color != Color.Unspecified) a = a.copy(colorArgb = s.color.toArgb())
+            if (s.background != Color.Unspecified) a = a.copy(highlightArgb = s.background.toArgb())
             attrs[i] = a
         }
     }
@@ -137,8 +150,8 @@ fun annotatedToJson(a: AnnotatedString): String {
             runs.put(
                 JSONObject()
                     .put("s", i).put("e", j)
-                    .put("b", at.bold).put("i", at.italic).put("u", at.underline)
-                    .put("sz", at.sizeSp).put("c", at.colorArgb)
+                    .put("b", at.bold).put("i", at.italic).put("u", at.underline).put("st", at.strike)
+                    .put("sz", at.sizeSp).put("c", at.colorArgb).put("hl", at.highlightArgb)
             )
         }
         i = j
@@ -166,8 +179,10 @@ fun jsonToAnnotated(json: String): AnnotatedString {
             bold = r.optBoolean("b"),
             italic = r.optBoolean("i"),
             underline = r.optBoolean("u"),
+            strike = r.optBoolean("st"),
             sizeSp = r.optInt("sz", DEFAULT_FONT_SP),
             colorArgb = r.optInt("c", COLOR_DEFAULT),
+            highlightArgb = r.optInt("hl", COLOR_DEFAULT),
         )
         for (idx in s until e) attrs[idx] = a
     }
@@ -187,8 +202,10 @@ data class RunOut(
     val bold: Boolean,
     val italic: Boolean,
     val underline: Boolean,
+    val strike: Boolean,
     val sizeSp: Int,
     val colorArgb: Int,
+    val highlightArgb: Int,
 )
 
 data class ParaOut(val alignCode: Int, val runs: List<RunOut>)
@@ -207,7 +224,7 @@ fun AnnotatedString.toParagraphsOut(): List<ParaOut> {
             val a = attrs[i]
             var j = i + 1
             while (j < e && attrs[j] == a) j++
-            runs.add(RunOut(text.substring(i, j), a.bold, a.italic, a.underline, a.sizeSp, a.colorArgb))
+            runs.add(RunOut(text.substring(i, j), a.bold, a.italic, a.underline, a.strike, a.sizeSp, a.colorArgb, a.highlightArgb))
             i = j
         }
         result.add(ParaOut(aligns.getOrElse(idx) { TextAlign.Right }.toCode(), runs))
