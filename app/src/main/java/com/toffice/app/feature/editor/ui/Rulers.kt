@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.toffice.app.feature.editor.model.PT_PER_CM
+import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.roundToInt
 
@@ -61,25 +62,30 @@ fun HorizontalRuler(
             val h = size.height
             val leftX = marginLeftPt * pxPerPt
             val rightX = (pageWidthPt - marginRightPt) * pxPerPt
-            // تظليل منطقة الهوامش
+            // تظليل منطقة الهوامش (فيزيائي)
             drawRect(shade, topLeft = androidx.compose.ui.geometry.Offset(0f, 0f),
                 size = androidx.compose.ui.geometry.Size(leftX, h))
             drawRect(shade, topLeft = androidx.compose.ui.geometry.Offset(rightX, 0f),
                 size = androidx.compose.ui.geometry.Size(size.width - rightX, h))
-            // علامات السنتيمتر (تبدأ من اليمين عند RTL)
-            val cmCount = ceil(pageWidthPt / PT_PER_CM).toInt()
-            fun mapX(d: Float): Float = if (rtl) size.width - d else d
-            for (cm in 0..cmCount) {
-                val x = mapX(cm * PT_PER_CM * pxPerPt)
-                drawLine(tick, androidx.compose.ui.geometry.Offset(x, h * 0.45f),
-                    androidx.compose.ui.geometry.Offset(x, h), strokeWidth = 1.5f)
-                if (cm < cmCount) {
-                    val xHalf = mapX((cm + 0.5f) * PT_PER_CM * pxPerPt)
+
+            // الترقيم بالسنتيمتر يبدأ من هامش البداية (مثل WPS):
+            // البداية = الهامش الأيسر (LTR) أو الأيمن (RTL)، والاتجاه نحو المتن.
+            val originPt = if (rtl) pageWidthPt - marginRightPt else marginLeftPt
+            val sign = if (rtl) -1f else 1f
+            val maxCm = ceil(pageWidthPt / PT_PER_CM).toInt()
+            for (d in -maxCm..maxCm) {
+                val x = (originPt + sign * d * PT_PER_CM) * pxPerPt
+                if (x in 0f..size.width) {
+                    drawLine(tick, androidx.compose.ui.geometry.Offset(x, h * 0.45f),
+                        androidx.compose.ui.geometry.Offset(x, h), strokeWidth = 1.5f)
+                }
+                val xHalf = (originPt + sign * (d + 0.5f) * PT_PER_CM) * pxPerPt
+                if (xHalf in 0f..size.width) {
                     drawLine(tick, androidx.compose.ui.geometry.Offset(xHalf, h * 0.7f),
                         androidx.compose.ui.geometry.Offset(xHalf, h), strokeWidth = 1f)
                 }
             }
-            // الأرقام
+            // الأرقام (القيمة = المسافة عن الهامش بالسنتيمتر، والصفر لا يُكتب)
             drawContext.canvas.nativeCanvas.apply {
                 val paint = android.graphics.Paint().apply {
                     color = tick.toArgb()
@@ -87,9 +93,10 @@ fun HorizontalRuler(
                     isAntiAlias = true
                     textAlign = android.graphics.Paint.Align.CENTER
                 }
-                for (cm in 0..cmCount) {
-                    val x = mapX(cm * PT_PER_CM * pxPerPt)
-                    drawText(cm.toString(), x, h * 0.42f, paint)
+                for (d in -maxCm..maxCm) {
+                    if (d == 0) continue
+                    val x = (originPt + sign * d * PT_PER_CM) * pxPerPt
+                    if (x in 0f..size.width) drawText(abs(d).toString(), x, h * 0.42f, paint)
                 }
             }
         }
@@ -147,12 +154,14 @@ fun VerticalRuler(
                 drawRect(shade, topLeft = androidx.compose.ui.geometry.Offset(0f, bottomY),
                     size = androidx.compose.ui.geometry.Size(w, size.height - bottomY))
             }
-            val cmCount = ceil(pageHeightPt / PT_PER_CM).toInt()
-            for (cm in 0..cmCount) {
-                val y = cm * PT_PER_CM * pxPerPt
-                if (y > size.height) break
-                drawLine(tick, androidx.compose.ui.geometry.Offset(w * 0.45f, y),
-                    androidx.compose.ui.geometry.Offset(w, y), strokeWidth = 1.5f)
+            // الترقيم يبدأ من الهامش العلوي (الصفر عند الهامش، مثل WPS)
+            val maxCm = ceil(pageHeightPt / PT_PER_CM).toInt()
+            for (d in -maxCm..maxCm) {
+                val y = (marginTopPt + d * PT_PER_CM) * pxPerPt
+                if (y in 0f..size.height) {
+                    drawLine(tick, androidx.compose.ui.geometry.Offset(w * 0.45f, y),
+                        androidx.compose.ui.geometry.Offset(w, y), strokeWidth = 1.5f)
+                }
             }
             drawContext.canvas.nativeCanvas.apply {
                 val paint = android.graphics.Paint().apply {
@@ -161,10 +170,10 @@ fun VerticalRuler(
                     isAntiAlias = true
                     textAlign = android.graphics.Paint.Align.CENTER
                 }
-                for (cm in 0..cmCount) {
-                    val y = cm * PT_PER_CM * pxPerPt
-                    if (y > size.height) break
-                    if (cm > 0) drawText(cm.toString(), w * 0.25f, y + 3f * density, paint)
+                for (d in -maxCm..maxCm) {
+                    if (d == 0) continue
+                    val y = (marginTopPt + d * PT_PER_CM) * pxPerPt
+                    if (y in 0f..size.height) drawText(abs(d).toString(), w * 0.25f, y + 3f * density, paint)
                 }
             }
         }
