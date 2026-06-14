@@ -9,15 +9,21 @@ import androidx.compose.ui.text.style.TextDirection
 object RichTextOps {
 
     const val BULLET = "• "
-    // رقم: "(" اختياري ثم أرقام ثم فاصل (.، )، -، :) ثم مسافة/مسافات
-    private val NUM_RE = Regex("^(\\()?([0-9٠-٩]+)([.)\\-:：])( +)")
-    // نقطة: رمز ثم مسافة/مسافات
-    private val BULLET_RE = Regex("^([•◦▪‣*\\-])( +)")
+    // كشف عام لعلامة قائمة (عشري/روماني/حروف لاتينية/عربية) للإزالة والاستبدال
+    private val NUM_RE = Regex("^(\\()?([0-9٠-٩]{1,4}|[A-Za-z]{1,6}|[ء-ي]{1,2})([.)\\-:：])( +)")
+    // كشف العلامة العشرية فقط (للمتابعة التلقائية الآمنة عند Enter)
+    private val NUM_DECIMAL_RE = Regex("^(\\()?([0-9٠-٩]+)([.)\\-:：])( +)")
+    private val BULLET_RE = Regex("^([•◦▪◆✤➢✔✧‣*\\-])( +)")
     private const val ARABIC_DIGITS = "٠١٢٣٤٥٦٧٨٩"
+    private const val AR_ALPHA = "أبتثجحخدذرزسشصضطظعغفقكلمنهوي"
 
-    /** مواصفة نمط القائمة (مرقّمة أو نقطية) مع الفاصل والمسافة. */
+    /** نوع الترقيم. */
+    enum class NumType { DECIMAL, UPPER_ROMAN, LOWER_ROMAN, UPPER_ALPHA, LOWER_ALPHA, ARABIC_ALPHA }
+
+    /** مواصفة نمط القائمة (مرقّمة أو نقطية) مع النوع والفاصل والمسافة. */
     data class ListSpec(
         val numbered: Boolean,
+        val numType: NumType = NumType.DECIMAL,
         val sep: String = ".",     // الفاصل بعد الرقم: . أو - أو ) أو :
         val wrap: Boolean = false, // (١) بقوسين
         val glyph: String = "•",   // رمز النقطة
@@ -189,9 +195,44 @@ object RichTextOps {
     private fun buildMarker(spec: ListSpec, n: Int, arabic: Boolean): String {
         val gap = " ".repeat(spec.spaces.coerceAtLeast(1))
         return if (spec.numbered) {
-            val num = formatNumber(n, arabic)
-            if (spec.wrap) "($num)$gap" else "$num${spec.sep}$gap"
+            val body = formatNum(n, spec.numType, arabic)
+            if (spec.wrap) "($body)$gap" else "$body${spec.sep}$gap"
         } else spec.glyph + gap
+    }
+
+    private fun formatNum(n: Int, type: NumType, arabic: Boolean): String = when (type) {
+        NumType.DECIMAL -> formatNumber(n, arabic)
+        NumType.UPPER_ROMAN -> toRoman(n)
+        NumType.LOWER_ROMAN -> toRoman(n).lowercase()
+        NumType.UPPER_ALPHA -> toAlpha(n)
+        NumType.LOWER_ALPHA -> toAlpha(n).lowercase()
+        NumType.ARABIC_ALPHA -> toArabicAlpha(n)
+    }
+
+    private fun toRoman(n: Int): String {
+        if (n <= 0 || n >= 4000) return n.toString()
+        val values = intArrayOf(1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1)
+        val syms = arrayOf("M", "CM", "D", "CD", "C", "XC", "L", "XL", "X", "IX", "V", "IV", "I")
+        var x = n
+        val sb = StringBuilder()
+        for (i in values.indices) while (x >= values[i]) { sb.append(syms[i]); x -= values[i] }
+        return sb.toString()
+    }
+
+    private fun toAlpha(n: Int): String {
+        if (n <= 0) return n.toString()
+        var x = n
+        val sb = StringBuilder()
+        while (x > 0) { x--; sb.insert(0, ('A' + (x % 26))); x /= 26 }
+        return sb.toString()
+    }
+
+    private fun toArabicAlpha(n: Int): String {
+        if (n <= 0) return n.toString()
+        var x = n
+        val sb = StringBuilder()
+        while (x > 0) { x--; sb.insert(0, AR_ALPHA[x % AR_ALPHA.length]); x /= AR_ALPHA.length }
+        return sb.toString()
     }
 
     /** يطبّق نمط قائمة على الفقرات المحدّدة (spec=null لإزالة القائمة). */
@@ -255,7 +296,7 @@ object RichTextOps {
                 i + 1
             }
             val prevLine = new.text.substring(prevStart, caret - 1)
-            val numMatch = NUM_RE.find(prevLine)
+            val numMatch = NUM_DECIMAL_RE.find(prevLine)
             val bulMatch = BULLET_RE.find(prevLine)
             val marker = when {
                 numMatch != null -> {

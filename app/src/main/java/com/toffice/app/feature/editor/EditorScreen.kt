@@ -654,19 +654,28 @@ private val LINE_SPACINGS = listOf(
 )
 
 private val BULLET_STYLES = listOf(
-    "•  نقطة" to RichTextOps.ListSpec(numbered = false, glyph = "•"),
-    "◦  دائرة" to RichTextOps.ListSpec(numbered = false, glyph = "◦"),
-    "▪  مربّع" to RichTextOps.ListSpec(numbered = false, glyph = "▪"),
+    "●  نقطة" to RichTextOps.ListSpec(numbered = false, glyph = "•"),
+    "■  مربّع" to RichTextOps.ListSpec(numbered = false, glyph = "▪"),
+    "◆  معيّن" to RichTextOps.ListSpec(numbered = false, glyph = "◆"),
+    "✤  زهرة" to RichTextOps.ListSpec(numbered = false, glyph = "✤"),
+    "➢  سهم" to RichTextOps.ListSpec(numbered = false, glyph = "➢"),
+    "✔  صح" to RichTextOps.ListSpec(numbered = false, glyph = "✔"),
+    "✧  نجمة" to RichTextOps.ListSpec(numbered = false, glyph = "✧"),
+    "◦  دائرة مفرغة" to RichTextOps.ListSpec(numbered = false, glyph = "◦"),
     "−  شرطة" to RichTextOps.ListSpec(numbered = false, glyph = "-"),
 )
 
 private val NUMBER_STYLES = listOf(
-    "١.  نقطة" to RichTextOps.ListSpec(numbered = true, sep = "."),
-    "١-  شرطة" to RichTextOps.ListSpec(numbered = true, sep = "-"),
-    "١)  قوس" to RichTextOps.ListSpec(numbered = true, sep = ")"),
-    "(١) قوسان" to RichTextOps.ListSpec(numbered = true, sep = ")", wrap = true),
-    "١:  نقطتان" to RichTextOps.ListSpec(numbered = true, sep = ":"),
-    "١.    مسافة واسعة" to RichTextOps.ListSpec(numbered = true, sep = ".", spaces = 3),
+    "١.  عربي نقطة" to RichTextOps.ListSpec(numbered = true, numType = RichTextOps.NumType.DECIMAL, sep = "."),
+    "١)  عربي قوس" to RichTextOps.ListSpec(numbered = true, numType = RichTextOps.NumType.DECIMAL, sep = ")"),
+    "(١) عربي قوسان" to RichTextOps.ListSpec(numbered = true, numType = RichTextOps.NumType.DECIMAL, sep = ")", wrap = true),
+    "١-  عربي شرطة" to RichTextOps.ListSpec(numbered = true, numType = RichTextOps.NumType.DECIMAL, sep = "-"),
+    "أ.  حروف عربية" to RichTextOps.ListSpec(numbered = true, numType = RichTextOps.NumType.ARABIC_ALPHA, sep = "."),
+    "A.  لاتيني كبير" to RichTextOps.ListSpec(numbered = true, numType = RichTextOps.NumType.UPPER_ALPHA, sep = "."),
+    "a)  لاتيني صغير" to RichTextOps.ListSpec(numbered = true, numType = RichTextOps.NumType.LOWER_ALPHA, sep = ")"),
+    "I.  روماني كبير" to RichTextOps.ListSpec(numbered = true, numType = RichTextOps.NumType.UPPER_ROMAN, sep = "."),
+    "i.  روماني صغير" to RichTextOps.ListSpec(numbered = true, numType = RichTextOps.NumType.LOWER_ROMAN, sep = "."),
+    "١.    مسافة واسعة" to RichTextOps.ListSpec(numbered = true, numType = RichTextOps.NumType.DECIMAL, sep = ".", spaces = 3),
 )
 
 @Composable

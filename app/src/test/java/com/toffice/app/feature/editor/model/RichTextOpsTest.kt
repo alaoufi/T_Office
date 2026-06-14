@@ -114,4 +114,62 @@ class RichTextOpsTest {
         val r = RichTextOps.maybeContinueList(old, new)
         assertEquals("نص عادي\n", r.annotatedString.text)
     }
+
+    // ---- أنواع الترقيم الموسّعة ----
+
+    @Test
+    fun upperRoman_sequence() {
+        val v = tfv("A\nB\nC")
+        val r = RichTextOps.applyList(v, RichTextOps.ListSpec(numbered = true, numType = RichTextOps.NumType.UPPER_ROMAN, sep = "."))
+        assertEquals("I. A\nII. B\nIII. C", r.annotatedString.text)
+    }
+
+    @Test
+    fun lowerRoman_sequence() {
+        val v = tfv("A\nB\nC\nD")
+        val r = RichTextOps.applyList(v, RichTextOps.ListSpec(numbered = true, numType = RichTextOps.NumType.LOWER_ROMAN, sep = "."))
+        assertEquals("i. A\nii. B\niii. C\niv. D", r.annotatedString.text)
+    }
+
+    @Test
+    fun upperAlpha_sequence() {
+        val v = tfv("x\ny\nz")
+        val r = RichTextOps.applyList(v, RichTextOps.ListSpec(numbered = true, numType = RichTextOps.NumType.UPPER_ALPHA, sep = "."))
+        assertEquals("A. x\nB. y\nC. z", r.annotatedString.text)
+    }
+
+    @Test
+    fun lowerAlpha_parenSequence() {
+        val v = tfv("x\ny\nz")
+        val r = RichTextOps.applyList(v, RichTextOps.ListSpec(numbered = true, numType = RichTextOps.NumType.LOWER_ALPHA, sep = ")"))
+        assertEquals("a) x\nb) y\nc) z", r.annotatedString.text)
+    }
+
+    @Test
+    fun arabicAlpha_sequence() {
+        val v = tfv("س١\nس٢\nس٣")
+        val r = RichTextOps.applyList(v, RichTextOps.ListSpec(numbered = true, numType = RichTextOps.NumType.ARABIC_ALPHA, sep = "."))
+        assertEquals("أ. س١\nب. س٢\nت. س٣", r.annotatedString.text)
+    }
+
+    @Test
+    fun diamondBullet_sequence() {
+        val v = tfv("a\nb")
+        val r = RichTextOps.applyList(v, RichTextOps.ListSpec(numbered = false, glyph = "◆"))
+        assertEquals("◆ a\n◆ b", r.annotatedString.text)
+    }
+
+    @Test
+    fun removeRomanMarker() {
+        val v = tfv("II. بند")
+        val r = RichTextOps.applyList(v, null)
+        assertEquals("بند", r.annotatedString.text)
+    }
+
+    @Test
+    fun removeAlphaMarker() {
+        val v = tfv("A. بند")
+        val r = RichTextOps.applyList(v, null)
+        assertEquals("بند", r.annotatedString.text)
+    }
 }
