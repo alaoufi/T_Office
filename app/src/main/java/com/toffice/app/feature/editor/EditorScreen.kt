@@ -247,6 +247,10 @@ fun EditorScreen(
     var hfEditing by remember { mutableStateOf<EditField?>(null) }
     // ارتفاع الورقة الفعلي (لمدّ المسطرة الجانبية ورسم فواصل الصفحات)
     var sheetHeightPx by remember { mutableStateOf(0) }
+    // ارتفاع كامل المحتوى (الورقة + الكتل) لمدّ المسطرة الجانبية
+    var contentHeightPx by remember { mutableStateOf(0) }
+    // معامل التكبير (1 = ملء العرض)؛ يتيح التمرير الأفقي عند التكبير
+    var zoom by remember { mutableStateOf(1f) }
 
     val undoStack = remember { mutableStateListOf<TextFieldValue>() }
     val redoStack = remember { mutableStateListOf<TextFieldValue>() }
@@ -581,74 +585,102 @@ fun EditorScreen(
                     val rulerThick = if (showRuler) 22.dp else 0.dp
                     val gap = if (showRuler) 2.dp else 0.dp
                     val density = LocalDensity.current.density
-                    val sheetWidthDp = maxWidth - rulerThick - gap
-                    val scale = sheetWidthDp.value / page.pageWidthPt
+                    val availWidthDp = maxWidth - rulerThick - gap
+                    val baseScale = (availWidthDp.value / page.pageWidthPt).coerceAtLeast(0.05f)
+                    val scale = baseScale * zoom
+                    val sheetWidthDp = (page.pageWidthPt * scale).dp
                     val pageHeightDp = page.pageHeightPt * scale
-                    // ارتفاع المحتوى الفعلي (لا يقل عن صفحة) وعدد الصفحات — يمنع اختفاء المسطرة الرأسية
-                    val sheetHeightDp = maxOf(pageHeightDp, if (sheetHeightPx > 0) sheetHeightPx / density else pageHeightDp)
+                    // ارتفاع المحتوى الفعلي (لا يقل عن صفحة) لمدّ المسطرة الجانبية وعدّ الصفحات
+                    val sheetHeightDp = maxOf(pageHeightDp, if (contentHeightPx > 0) contentHeightPx / density else pageHeightDp)
                     val pageCount = paginationPageCount(sheetHeightDp, pageHeightDp)
 
                     // اتجاه المسطرة يتبع اتجاه الصفحة (ثابت لا يتأثر بالتنسيق)
                     val rulerRtl = page.rtlPage
-                    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                    // تمرير متزامن: الأفقي بين المسطرة العلوية والمحتوى، والعمودي بين المسطرة الجانبية والمحتوى
+                    val hScroll = rememberScrollState()
+                    val vScroll = rememberScrollState()
+                    Box(Modifier.fillMaxSize()) {
+                      Column(Modifier.fillMaxSize()) {
+                        // المسطرة العلوية ثابتة (خارج التمرير العمودي) ومتزامنة أفقياً
                         if (showRuler) {
                             Row {
                                 Spacer(Modifier.width(rulerThick + gap))
-                                HorizontalRuler(
-                                    pageWidthPt = page.pageWidthPt,
-                                    marginLeftPt = page.marginLeftPt,
-                                    marginRightPt = page.marginRightPt,
-                                    scale = scale,
-                                    rtl = rulerRtl,
-                                    onChange = { l, r -> page = page.copy(marginLeftPt = l, marginRightPt = r) },
-                                )
+                                Box(Modifier.weight(1f).horizontalScroll(hScroll)) {
+                                    HorizontalRuler(
+                                        pageWidthPt = page.pageWidthPt,
+                                        marginLeftPt = page.marginLeftPt,
+                                        marginRightPt = page.marginRightPt,
+                                        scale = scale,
+                                        rtl = rulerRtl,
+                                        onChange = { l, r -> page = page.copy(marginLeftPt = l, marginRightPt = r) },
+                                    )
+                                }
                             }
                             Spacer(Modifier.height(2.dp))
                         }
-                        Row {
+                        Row(Modifier.weight(1f)) {
                             if (showRuler) {
-                                VerticalRuler(
-                                    pageHeightPt = page.pageHeightPt,
-                                    heightDp = sheetHeightDp,
-                                    marginTopPt = page.marginTopPt,
-                                    marginBottomPt = page.marginBottomPt,
-                                    scale = scale,
-                                    onChange = { t, b -> page = page.copy(marginTopPt = t, marginBottomPt = b) },
-                                )
+                                // المسطرة الجانبية متزامنة عمودياً مع المحتوى
+                                Box(Modifier.verticalScroll(vScroll)) {
+                                    VerticalRuler(
+                                        pageHeightPt = page.pageHeightPt,
+                                        heightDp = sheetHeightDp,
+                                        marginTopPt = page.marginTopPt,
+                                        marginBottomPt = page.marginBottomPt,
+                                        scale = scale,
+                                        onChange = { t, b -> page = page.copy(marginTopPt = t, marginBottomPt = b) },
+                                    )
+                                }
                                 Spacer(Modifier.width(gap))
                             }
-                            PageSheet(
-                                widthDp = sheetWidthDp,
-                                pageHeightDp = pageHeightDp,
-                                pageCount = pageCount,
-                                page = page,
-                                scale = scale,
-                                value = value,
-                                onValueChange = { update(it) },
-                                header = header,
-                                onHeaderChange = { header = it },
-                                footer = footer,
-                                onFooterChange = { footer = it },
-                                hfEditing = hfEditing,
-                                onStartEditHF = { field -> hfEditing = field; focusTarget = field },
-                                onBodyFocus = { focusTarget = EditField.Body; hfEditing = null; focusedExtra = -1 },
-                                onSheetHeight = { sheetHeightPx = it },
-                            )
+                            // منطقة العرض: تمرير عمودي + أفقي (للتكبير/الجداول العريضة/الوضع الأفقي)
+                            Box(Modifier.weight(1f).verticalScroll(vScroll).horizontalScroll(hScroll)) {
+                                Column(
+                                    Modifier
+                                        .width(sheetWidthDp)
+                                        .onSizeChanged { contentHeightPx = it.height },
+                                ) {
+                                    PageSheet(
+                                        widthDp = sheetWidthDp,
+                                        pageHeightDp = pageHeightDp,
+                                        pageCount = pageCount,
+                                        page = page,
+                                        scale = scale,
+                                        value = value,
+                                        onValueChange = { update(it) },
+                                        header = header,
+                                        onHeaderChange = { header = it },
+                                        footer = footer,
+                                        onFooterChange = { footer = it },
+                                        hfEditing = hfEditing,
+                                        onStartEditHF = { field -> hfEditing = field; focusTarget = field },
+                                        onBodyFocus = { focusTarget = EditField.Body; hfEditing = null; focusedExtra = -1 },
+                                        onSheetHeight = { sheetHeightPx = it },
+                                    )
+                                    // كتل ما بعد المتن بالترتيب (نص/جدول/صورة) — المحرّك الكتلي
+                                    DocumentBlocks(
+                                        blocks = extraBlocks,
+                                        onTextChange = { i, v -> extraBlocks[i] = TextBlockUi(v) },
+                                        onTextFocus = { i -> focusedExtra = i; focusTarget = EditField.Body; hfEditing = null },
+                                        onTableChange = { i, t -> extraBlocks[i] = TableBlockUi(t) },
+                                        onImageResize = { i, im -> extraBlocks[i] = ImageBlockUi(im) },
+                                        onDelete = { i ->
+                                            (extraBlocks[i] as? ImageBlockUi)?.let { ImageStore.delete(it.img.path) }
+                                            extraBlocks.removeAt(i)
+                                            if (focusedExtra >= extraBlocks.size) focusedExtra = -1
+                                        },
+                                    )
+                                    Spacer(Modifier.height(24.dp))
+                                }
+                            }
                         }
-                        // كتل ما بعد المتن بالترتيب (نص/جدول/صورة) — المحرّك الكتلي
-                        DocumentBlocks(
-                            blocks = extraBlocks,
-                            onTextChange = { i, v -> extraBlocks[i] = TextBlockUi(v) },
-                            onTextFocus = { i -> focusedExtra = i; focusTarget = EditField.Body; hfEditing = null },
-                            onTableChange = { i, t -> extraBlocks[i] = TableBlockUi(t) },
-                            onImageResize = { i, im -> extraBlocks[i] = ImageBlockUi(im) },
-                            onDelete = { i ->
-                                (extraBlocks[i] as? ImageBlockUi)?.let { ImageStore.delete(it.img.path) }
-                                extraBlocks.removeAt(i)
-                                if (focusedExtra >= extraBlocks.size) focusedExtra = -1
-                            },
-                        )
-                        Spacer(Modifier.height(24.dp))
+                      }
+                      // أزرار التكبير/التصغير
+                      ZoomControls(
+                        zoom = zoom,
+                        onZoom = { zoom = it.coerceIn(0.5f, 3f) },
+                        modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp),
+                      )
                     }
                   }
                 }
@@ -887,6 +919,18 @@ private fun PageSheet(
                     modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
                 )
             }
+        }
+    }
+}
+
+/** أزرار التكبير/التصغير: − ، النسبة (نقر = إعادة ١٠٠٪) ، + . */
+@Composable
+private fun ZoomControls(zoom: Float, onZoom: (Float) -> Unit, modifier: Modifier = Modifier) {
+    Card(modifier, shape = CircleShape) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
+            TextButton(onClick = { onZoom(zoom - 0.25f) }) { Text("−", fontSize = 18.sp) }
+            TextButton(onClick = { onZoom(1f) }) { Text("${arabicDigits((zoom * 100).toInt())}٪") }
+            TextButton(onClick = { onZoom(zoom + 0.25f) }) { Text("+", fontSize = 18.sp) }
         }
     }
 }
