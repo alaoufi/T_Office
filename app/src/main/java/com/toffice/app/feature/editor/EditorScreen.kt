@@ -3,6 +3,7 @@ package com.toffice.app.feature.editor
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -115,6 +116,7 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -129,6 +131,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
@@ -226,6 +229,7 @@ fun EditorScreen(
     var showSaveAs by remember { mutableStateOf(false) }
     var openMenu by remember { mutableStateOf<String?>(null) }
     var showRuler by remember { mutableStateOf(true) }
+    var showPreview by remember { mutableStateOf(false) }
     var showFindReplace by remember { mutableStateOf(false) }
     var findQuery by remember { mutableStateOf("") }
     var replaceQuery by remember { mutableStateOf("") }
@@ -359,6 +363,8 @@ fun EditorScreen(
                         onPageSetup = { showPageSetup = true },
                         onTogglePageNumber = { page = page.copy(showPageNumber = !page.showPageNumber) },
                         onToggleRuler = { showRuler = !showRuler },
+                        showPreview = showPreview,
+                        onTogglePreview = { showPreview = !showPreview },
                         onWordCount = { viewModel.notify("عدد الكلمات: ${arabicDigits(wordCount(value.text))}") },
                         onCharCount = { viewModel.notify("عدد الأحرف: ${arabicDigits(value.text.length)}") },
                         onDelete = {
@@ -419,6 +425,15 @@ fun EditorScreen(
                         .background(MaterialTheme.colorScheme.surfaceVariant)
                         .padding(8.dp),
                 ) {
+                  if (showPreview) {
+                    PrintPreview(
+                        body = value.annotatedString,
+                        header = header.annotatedString,
+                        footer = footer.annotatedString,
+                        page = page,
+                        maxWidth = maxWidth,
+                    )
+                  } else {
                     val rulerThick = if (showRuler) 22.dp else 0.dp
                     val gap = if (showRuler) 2.dp else 0.dp
                     val density = LocalDensity.current.density
@@ -478,8 +493,83 @@ fun EditorScreen(
                         }
                         Spacer(Modifier.height(24.dp))
                     }
+                  }
                 }
             }
+        }
+    }
+}
+
+/** معاينة الطباعة: صفحات A4 حقيقية بفجوة بينها + ترويسة/تذييل/رقم صفحة لكل صفحة. */
+@Composable
+private fun PrintPreview(
+    body: AnnotatedString,
+    header: AnnotatedString,
+    footer: AnnotatedString,
+    page: PageSettings,
+    maxWidth: androidx.compose.ui.unit.Dp,
+) {
+    val density = LocalDensity.current.density
+    val measurer = androidx.compose.ui.text.rememberTextMeasurer()
+    val pageWdp = maxWidth - 24.dp
+    val scale = (pageWdp.value / page.pageWidthPt).coerceAtLeast(0.1f)
+    val pageHdp = page.pageHeightPt * scale
+    val contentWpx = ((page.pageWidthPt - page.marginLeftPt - page.marginRightPt) * scale * density).coerceAtLeast(10f)
+    val contentHpx = ((page.pageHeightPt - page.marginTopPt - page.marginBottomPt) * scale * density).coerceAtLeast(10f)
+    val leftPx = page.marginLeftPt * scale * density
+    val topPx = page.marginTopPt * scale * density
+    val ldir = if (page.rtlPage) LayoutDirection.Rtl else LayoutDirection.Ltr
+    val baseStyle = TextStyle(fontSize = 16.sp, color = Color(0xFF1A1A1A))
+    val hfStyle = TextStyle(fontSize = 13.sp, color = Color(0xFF555555))
+
+    val layout = remember(body, contentWpx, scale) {
+        measurer.measure(
+            body,
+            style = baseStyle,
+            constraints = androidx.compose.ui.unit.Constraints(maxWidth = contentWpx.toInt()),
+            layoutDirection = ldir,
+        )
+    }
+    val slices = remember(layout, contentHpx) {
+        val list = mutableListOf<Int>()
+        val total = layout.lineCount
+        var start = 0
+        while (start < total) {
+            val sTop = layout.getLineTop(start)
+            var end = start
+            while (end < total && layout.getLineBottom(end) - sTop <= contentHpx) end++
+            if (end == start) end = start + 1
+            list.add(start)
+            start = end
+        }
+        if (list.isEmpty()) list.add(0)
+        list
+    }
+    val total = slices.size
+
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        slices.forEachIndexed { idx, sLine ->
+            val sliceTop = if (layout.lineCount > 0) layout.getLineTop(sLine) else 0f
+            Box(Modifier.width(pageWdp).height(pageHdp.dp).shadow(4.dp).background(Color.White)) {
+                Canvas(Modifier.fillMaxSize()) {
+                    if (header.text.isNotBlank()) {
+                        drawText(measurer, header, topLeft = Offset(leftPx, topPx * 0.2f), style = hfStyle, size = Size(contentWpx, topPx))
+                    }
+                    clipRect(leftPx, topPx, leftPx + contentWpx, topPx + contentHpx) {
+                        drawText(layout, topLeft = Offset(leftPx, topPx - sliceTop))
+                    }
+                    val footY = topPx + contentHpx + (page.marginBottomPt * scale * density) * 0.15f
+                    if (footer.text.isNotBlank()) {
+                        drawText(measurer, footer, topLeft = Offset(leftPx, footY), style = hfStyle, size = Size(contentWpx, size.height - footY))
+                    }
+                    val pn = measurer.measure(AnnotatedString("صفحة ${arabicDigits(idx + 1)} من ${arabicDigits(total)}"), style = TextStyle(fontSize = 12.sp, color = Color(0xFF777777)))
+                    drawText(pn, topLeft = Offset((size.width - pn.size.width) / 2f, size.height - pn.size.height - 6f * density))
+                }
+            }
+            Spacer(Modifier.height(14.dp))
         }
     }
 }
@@ -805,6 +895,8 @@ private fun EditorMenuBar(
     onPageSetup: () -> Unit,
     onTogglePageNumber: () -> Unit,
     onToggleRuler: () -> Unit,
+    showPreview: Boolean,
+    onTogglePreview: () -> Unit,
     onWordCount: () -> Unit,
     onCharCount: () -> Unit,
     onDelete: () -> Unit,
@@ -886,6 +978,7 @@ private fun EditorMenuBar(
             MenuRow("تباعد مزدوج", Icons.Default.FormatLineSpacing) { close(); onChange(RichTextOps.setLineSpacing(value, 2.0f)) }
         }
         MenuBarMenu("عرض", openMenu, onOpenMenu) { close ->
+            MenuRow(if (showPreview) "وضع التحرير" else "معاينة الطباعة", Icons.Default.Straighten) { close(); onTogglePreview() }
             MenuRow(if (showRuler) "إخفاء المسطرة" else "إظهار المسطرة", Icons.Default.Straighten) { close(); onToggleRuler() }
         }
         MenuBarMenu("أدوات", openMenu, onOpenMenu) { close ->
