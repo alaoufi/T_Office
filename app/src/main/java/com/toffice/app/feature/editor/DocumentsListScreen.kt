@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.FileOpen
+import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -28,10 +29,13 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import android.net.Uri
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -63,6 +67,17 @@ fun DocumentsListScreen(
         if (uri != null) viewModel.importDocx(uri) { id -> onOpenDocument(id) }
     }
 
+    var pdfUri by remember { mutableStateOf<Uri?>(null) }
+    val pdfLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri -> if (uri != null) pdfUri = uri }
+
+    val currentPdf = pdfUri
+    if (currentPdf != null) {
+        PdfViewerScreen(uri = currentPdf, title = "قارئ PDF", onBack = { pdfUri = null })
+        return
+    }
+
     androidx.compose.runtime.LaunchedEffect(Unit) {
         viewModel.events.collect { msg -> snackbar.showSnackbar(msg) }
     }
@@ -78,6 +93,9 @@ fun DocumentsListScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = { pdfLauncher.launch(arrayOf("application/pdf")) }) {
+                        Icon(Icons.Default.PictureAsPdf, contentDescription = "فتح PDF")
+                    }
                     IconButton(onClick = {
                         importLauncher.launch(arrayOf(MIME_DOCX, "application/msword", "*/*"))
                     }) {
