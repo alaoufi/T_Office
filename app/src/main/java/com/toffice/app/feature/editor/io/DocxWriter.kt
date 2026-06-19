@@ -127,6 +127,15 @@ object DocxWriter {
                 if (rtl) sb.append("<w:bidi/>")
                 sb.append("<w:jc w:val=\"").append(jc).append("\"/></w:pPr>")
                 sb.append("<w:r><w:rPr>")
+                if (cell.bold) sb.append("<w:b/><w:bCs/>")
+                if (cell.color != 0L) {
+                    val rgb = String.format("%06X", cell.color and 0xFFFFFF)
+                    sb.append("<w:color w:val=\"").append(rgb).append("\"/>")
+                }
+                if (cell.size != 0) {
+                    val half = cell.size * 2
+                    sb.append("<w:sz w:val=\"").append(half).append("\"/><w:szCs w:val=\"").append(half).append("\"/>")
+                }
                 if (rtl) sb.append("<w:rtl/>")
                 sb.append("</w:rPr><w:t xml:space=\"preserve\">").append(escape(cell.text)).append("</w:t></w:r></w:p>")
                 sb.append("</w:tc>")

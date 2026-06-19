@@ -3,8 +3,15 @@ package com.toffice.app.feature.editor.model
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** خلية جدول: نص + محاذاة (0=حسب الاتجاه، 1=توسيط، 2=يسار، 3=يمين) + امتداد أفقي span. */
-data class TableCell(val text: String = "", val align: Int = 0, val span: Int = 1)
+/** خلية جدول: نص + محاذاة + امتداد أفقي + تنسيق (غامق/لون/حجم). */
+data class TableCell(
+    val text: String = "",
+    val align: Int = 0,
+    val span: Int = 1,
+    val bold: Boolean = false,
+    val color: Long = 0L, // 0 = اللون الافتراضي
+    val size: Int = 0,    // 0 = الحجم الافتراضي (14)
+)
 
 /** بيانات جدول: صفوف من الخلايا + أوزان عرض الأعمدة (مرونة كأنها Excel). */
 data class TableData(
@@ -50,6 +57,15 @@ object TableOps {
     fun setCellAlign(t: TableData, row: Int, col: Int, align: Int): TableData =
         map(t, row, col) { it.copy(align = align) }
 
+    fun setCellBold(t: TableData, row: Int, col: Int, bold: Boolean): TableData =
+        map(t, row, col) { it.copy(bold = bold) }
+
+    fun setCellColor(t: TableData, row: Int, col: Int, color: Long): TableData =
+        map(t, row, col) { it.copy(color = color) }
+
+    fun setCellSize(t: TableData, row: Int, col: Int, size: Int): TableData =
+        map(t, row, col) { it.copy(size = size.coerceIn(8, 72)) }
+
     /** دمج الخلية مع العمود التالي (امتداد أفقي). */
     fun mergeRight(t: TableData, row: Int, col: Int): TableData {
         if (row !in t.rows.indices || col < 0) return t
@@ -87,7 +103,10 @@ object TableOps {
             for (row in t.rows) {
                 val rowArr = JSONArray()
                 for (cell in row) {
-                    rowArr.put(JSONObject().put("t", cell.text).put("a", cell.align).put("s", cell.span))
+                    rowArr.put(
+                        JSONObject().put("t", cell.text).put("a", cell.align).put("s", cell.span)
+                            .put("b", cell.bold).put("c", cell.color).put("z", cell.size),
+                    )
                 }
                 rowsArr.put(rowArr)
             }
@@ -110,7 +129,12 @@ object TableOps {
                 for (c in 0 until rowArr.length()) {
                     val cellObj = rowArr.optJSONObject(c)
                     if (cellObj != null) {
-                        cells.add(TableCell(cellObj.optString("t", ""), cellObj.optInt("a", 0), cellObj.optInt("s", 1)))
+                        cells.add(
+                            TableCell(
+                                cellObj.optString("t", ""), cellObj.optInt("a", 0), cellObj.optInt("s", 1),
+                                cellObj.optBoolean("b", false), cellObj.optLong("c", 0L), cellObj.optInt("z", 0),
+                            ),
+                        )
                     } else {
                         cells.add(TableCell(rowArr.optString(c, "")))
                     }

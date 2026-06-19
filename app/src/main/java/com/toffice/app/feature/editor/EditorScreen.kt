@@ -27,6 +27,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
@@ -1151,6 +1153,27 @@ private fun TablesEditor(
                         TextButton(onClick = { if (sel.first == ti && sel.second >= 0 && sel.third >= 0) onChange(ti, TableOps.mergeRight(table, sel.second, sel.third)) }) { Text("دمج ←") }
                         TextButton(onClick = { if (sel.first == ti && sel.second >= 0 && sel.third >= 0) onChange(ti, TableOps.splitCell(table, sel.second, sel.third)) }) { Text("فصل") }
                     }
+                    // تنسيق الخلية المحدّدة: غامق + حجم + لون
+                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
+                        val selCell = if (sel.first == ti && sel.second in table.rows.indices && sel.third >= 0)
+                            table.rows[sel.second].getOrNull(sel.third) else null
+                        val onSel: (TableData) -> Unit = { t -> if (sel.first == ti) onChange(ti, t) }
+                        IconButton(onClick = { selCell?.let { onSel(TableOps.setCellBold(table, sel.second, sel.third, !it.bold)) } }) {
+                            Icon(Icons.Default.FormatBold, "غامق", tint = if (selCell?.bold == true) MaterialTheme.colorScheme.primary else LocalContentColor.current)
+                        }
+                        TextButton(onClick = { selCell?.let { onSel(TableOps.setCellSize(table, sel.second, sel.third, (if (it.size > 0) it.size else 14) - 2)) } }) { Text("ص−") }
+                        TextButton(onClick = { selCell?.let { onSel(TableOps.setCellSize(table, sel.second, sel.third, (if (it.size > 0) it.size else 14) + 2)) } }) { Text("ص+") }
+                        Spacer(Modifier.width(4.dp))
+                        listOf(0L to "افتراضي", 0xFFD32F2FL to "أحمر", 0xFF1565C0L to "أزرق", 0xFF2E7D32L to "أخضر", 0xFF000000L to "أسود").forEach { (col, _) ->
+                            Box(
+                                Modifier.padding(2.dp).size(22.dp)
+                                    .background(if (col == 0L) Color.Transparent else Color(col), CircleShape)
+                                    .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
+                                    .clickable { if (sel.first == ti && sel.second >= 0 && sel.third >= 0) onChange(ti, TableOps.setCellColor(table, sel.second, sel.third, col)) },
+                                contentAlignment = Alignment.Center,
+                            ) { if (col == 0L) Text("∅", fontSize = 12.sp) }
+                        }
+                    }
                     // الخلايا (مع تخطّي الخلايا المغطّاة بالدمج وامتداد الوزن)
                     table.rows.forEachIndexed { r, row ->
                         Row(Modifier.fillMaxWidth()) {
@@ -1171,7 +1194,12 @@ private fun TablesEditor(
                                     value = cell.text,
                                     onValueChange = { onChange(ti, TableOps.setCell(table, r, cc, it)) },
                                     singleLine = false,
-                                    textStyle = TextStyle(fontSize = 14.sp, textAlign = ta),
+                                    textStyle = TextStyle(
+                                        fontSize = (if (cell.size > 0) cell.size else 14).sp,
+                                        textAlign = ta,
+                                        fontWeight = if (cell.bold) FontWeight.Bold else null,
+                                        color = if (cell.color != 0L) Color(cell.color) else Color.Unspecified,
+                                    ),
                                     label = if (selected) ({ Text(if (span > 1) "محدّدة (مدموجة ×$span)" else "محدّدة") }) else null,
                                     modifier = Modifier
                                         .weight(wsum)
