@@ -62,16 +62,14 @@ class EditorViewModel @Inject constructor(
         }
     }
 
-    /** حفظ داخلي + حفظ بنفس ملف DOCX الأصلي إن وُجد. */
+    /** حفظ داخلي + حفظ بنفس ملف DOCX الأصلي إن وُجد (كتل مرتّبة). */
     fun save(
         title: String,
         json: String,
-        annotated: AnnotatedString,
+        blocks: List<com.toffice.app.feature.editor.model.DocBlock>,
         page: PageSettings,
         header: AnnotatedString,
         footer: AnnotatedString,
-        tables: List<com.toffice.app.feature.editor.model.TableData> = emptyList(),
-        afterBody: AnnotatedString = AnnotatedString(""),
         silent: Boolean = false,
     ) {
         viewModelScope.launch {
@@ -87,7 +85,7 @@ class EditorViewModel @Inject constructor(
             }
             val src = sourceUri
             if (src != null) {
-                val ok = writeDocxTo(Uri.parse(src), annotated, page, header, footer, tables, afterBody)
+                val ok = writeBlocksTo(Uri.parse(src), blocks, page, header, footer)
                 // الحفظ التلقائي صامت حتى لا يُزعج المستخدم برسائل متكرّرة
                 if (!silent) _events.emit(if (ok) "تم الحفظ في ملف Word الأصلي" else "تم الحفظ داخلياً (تعذّر الكتابة على الملف الأصلي)")
             } else if (!silent) {
@@ -145,9 +143,9 @@ class EditorViewModel @Inject constructor(
         "مستند"
     }
 
-    fun exportDocx(uri: Uri, annotated: AnnotatedString, page: PageSettings, header: AnnotatedString, footer: AnnotatedString, tables: List<com.toffice.app.feature.editor.model.TableData> = emptyList(), afterBody: AnnotatedString = AnnotatedString("")) {
+    fun exportDocx(uri: Uri, blocks: List<com.toffice.app.feature.editor.model.DocBlock>, page: PageSettings, header: AnnotatedString, footer: AnnotatedString) {
         viewModelScope.launch {
-            val ok = writeDocxTo(uri, annotated, page, header, footer, tables, afterBody)
+            val ok = writeBlocksTo(uri, blocks, page, header, footer)
             _events.emit(if (ok) "تم تصدير ملف Word بنجاح" else "تعذّر التصدير")
         }
     }
@@ -182,20 +180,18 @@ class EditorViewModel @Inject constructor(
         }
     }
 
-    private suspend fun writeDocxTo(
+    private suspend fun writeBlocksTo(
         uri: Uri,
-        annotated: AnnotatedString,
+        blocks: List<com.toffice.app.feature.editor.model.DocBlock>,
         page: PageSettings,
         header: AnnotatedString,
         footer: AnnotatedString,
-        tables: List<com.toffice.app.feature.editor.model.TableData> = emptyList(),
-        afterBody: AnnotatedString = AnnotatedString(""),
     ): Boolean = kotlinx.coroutines.withContext(Dispatchers.IO) {
         try {
             // "wt" يقتطع الملف قبل الكتابة لتفادي بقايا قديمة
             val mode = if (uri.scheme == "content") "wt" else "w"
             context.contentResolver.openOutputStream(uri, mode)?.use {
-                DocxWriter.write(it, annotated.toParagraphsOut(), page, header.toParagraphsOut(), footer.toParagraphsOut(), tables, afterBody.toParagraphsOut())
+                DocxWriter.writeBlocks(it, blocks, page, header.toParagraphsOut(), footer.toParagraphsOut())
             } ?: return@withContext false
             true
         } catch (e: Exception) {

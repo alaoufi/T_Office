@@ -9,10 +9,13 @@ import androidx.compose.foundation.background
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.platform.LocalContext
 import com.toffice.app.feature.editor.io.ImageStore
+import com.toffice.app.feature.editor.model.DocBlock
 import com.toffice.app.feature.editor.model.DocImage
+import com.toffice.app.feature.editor.model.ImageBlock
+import com.toffice.app.feature.editor.model.TableBlock
+import com.toffice.app.feature.editor.model.TextBlock
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -186,6 +189,37 @@ private val SWATCHES = listOf(
     0xFF2E7D32.toInt(), 0xFFEF6C00.toInt(), 0xFF6A1B9A.toInt(),
 )
 
+/** حالة كتلة في واجهة المحرّر (بعد المتن الرئيسي): نص قابل للتحرير أو جدول أو صورة. */
+sealed interface BlockUi
+data class TextBlockUi(val value: TextFieldValue) : BlockUi
+data class TableBlockUi(val data: TableData) : BlockUi
+data class ImageBlockUi(val img: DocImage) : BlockUi
+
+private fun DocBlock.toUi(): BlockUi = when (this) {
+    is TextBlock -> TextBlockUi(TextFieldValue(content))
+    is TableBlock -> TableBlockUi(table)
+    is ImageBlock -> ImageBlockUi(image)
+}
+
+private fun BlockUi.toModel(): DocBlock = when (this) {
+    is TextBlockUi -> TextBlock(value.annotatedString)
+    is TableBlockUi -> TableBlock(data)
+    is ImageBlockUi -> ImageBlock(img)
+}
+
+/** يحمّل المستند: المتن الرئيسي = أول كتلة نصية، والباقي كتل بالترتيب. */
+private fun loadBlocksInto(bundle: DocBundle, extra: MutableList<BlockUi>, setBody: (TextFieldValue) -> Unit) {
+    val eff = bundle.effectiveBlocks()
+    extra.clear()
+    if (eff.isNotEmpty() && eff[0] is TextBlock) {
+        setBody(TextFieldValue((eff[0] as TextBlock).content))
+        eff.drop(1).forEach { extra.add(it.toUi()) }
+    } else {
+        setBody(TextFieldValue(""))
+        eff.forEach { extra.add(it.toUi()) }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class, FlowPreview::class)
 @Composable
 fun EditorScreen(
@@ -201,9 +235,10 @@ fun EditorScreen(
     var page by remember { mutableStateOf(PageSettings()) }
     var header by remember { mutableStateOf(TextFieldValue()) }
     var footer by remember { mutableStateOf(TextFieldValue()) }
-    val tables = remember { mutableStateListOf<TableData>() }
-    val images = remember { mutableStateListOf<DocImage>() }
-    var afterBody by remember { mutableStateOf(TextFieldValue()) }
+    // كتل ما بعد المتن الرئيسي، بالترتيب (نص/جدول/صورة) — المحرّك الكتلي
+    val extraBlocks = remember { mutableStateListOf<BlockUi>() }
+    // الكتلة النصية المركّزة ضمن extraBlocks (-1 = المتن الرئيسي)
+    var focusedExtra by remember { mutableStateOf(-1) }
     var showInsertTable by remember { mutableStateOf(false) }
 
     // الحقل المركّز حالياً يحدّد أين يطبّق شريط التنسيق
@@ -244,13 +279,10 @@ fun EditorScreen(
         if (!ui.isLoading && !initialized) {
             title = ui.title
             val bundle = DocSerializer.parse(ui.json)
-            value = TextFieldValue(bundle.body)
             page = bundle.page
             header = TextFieldValue(bundle.header)
             footer = TextFieldValue(bundle.footer)
-            tables.clear(); tables.addAll(bundle.tables)
-            images.clear(); images.addAll(bundle.images)
-            afterBody = TextFieldValue(bundle.afterBody)
+            loadBlocksInto(bundle, extraBlocks) { value = it }
             initialized = true
         }
     }
@@ -267,16 +299,33 @@ fun EditorScreen(
     var findQuery by remember { mutableStateOf("") }
     var replaceQuery by remember { mutableStateOf("") }
 
-    // إدراج كتلة (جدول/صورة) في موضع المؤشر: يُقسَّم المتن عند المؤشر، وما بعده ينتقل لما بعد الكتلة
-    fun splitBodyAtCursor() {
-        if (focusTarget != EditField.Body) return
-        val full = value.annotatedString
-        val cur = value.selection.start.coerceIn(0, full.length)
-        val after = full.subSequence(cur, full.length)
-        if (after.isEmpty()) return
-        val combined = buildAnnotatedString { append(after); append(afterBody.annotatedString) }
-        update(TextFieldValue(full.subSequence(0, cur)))
-        afterBody = TextFieldValue(combined)
+    // قائمة الكتل الكاملة (للحفظ/التصدير): المتن الرئيسي ثم كتل ما بعده بالترتيب
+    fun allBlocks(): List<DocBlock> = buildList {
+        add(TextBlock(value.annotatedString))
+        extraBlocks.forEach { add(it.toModel()) }
+    }
+
+    // إدراج كتلة (جدول/صورة) في موضع المؤشر: يُقسَّم النص المركّز، وما بعده ينتقل لما بعد الكتلة
+    fun insertBlock(newBlock: BlockUi) {
+        val fe = focusedExtra
+        if (fe >= 0 && fe < extraBlocks.size && extraBlocks[fe] is TextBlockUi) {
+            val tb = extraBlocks[fe] as TextBlockUi
+            val full = tb.value.annotatedString
+            val cur = tb.value.selection.start.coerceIn(0, full.length)
+            val after = full.subSequence(cur, full.length)
+            extraBlocks[fe] = TextBlockUi(TextFieldValue(full.subSequence(0, cur)))
+            extraBlocks.add(fe + 1, newBlock)
+            if (after.isNotEmpty()) extraBlocks.add(fe + 2, TextBlockUi(TextFieldValue(after)))
+        } else if (focusTarget == EditField.Body) {
+            val full = value.annotatedString
+            val cur = value.selection.start.coerceIn(0, full.length)
+            val after = full.subSequence(cur, full.length)
+            update(TextFieldValue(full.subSequence(0, cur)))
+            extraBlocks.add(0, newBlock)
+            if (after.isNotEmpty()) extraBlocks.add(1, TextBlockUi(TextFieldValue(after)))
+        } else {
+            extraBlocks.add(newBlock)
+        }
     }
 
     val openLauncher = rememberLauncherForActivityResult(
@@ -284,13 +333,10 @@ fun EditorScreen(
     ) { uri ->
         if (uri != null) viewModel.openDocx(uri) { newTitle, bundle ->
             title = newTitle
-            value = TextFieldValue(bundle.body)
             page = bundle.page
             header = TextFieldValue(bundle.header)
             footer = TextFieldValue(bundle.footer)
-            tables.clear(); tables.addAll(bundle.tables)
-            images.clear(); images.addAll(bundle.images)
-            afterBody = TextFieldValue(bundle.afterBody)
+            loadBlocksInto(bundle, extraBlocks) { value = it }
             undoStack.clear()
             redoStack.clear()
         }
@@ -298,7 +344,7 @@ fun EditorScreen(
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument(MIME_DOCX)
     ) { uri ->
-        if (uri != null) viewModel.exportDocx(uri, value.annotatedString, page, header.annotatedString, footer.annotatedString, tables.toList(), afterBody.annotatedString)
+        if (uri != null) viewModel.exportDocx(uri, allBlocks(), page, header.annotatedString, footer.annotatedString)
     }
     val pdfLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/pdf")
@@ -317,14 +363,15 @@ fun EditorScreen(
     ) { uri ->
         if (uri != null) imageScope.launch {
             val img = withContext(Dispatchers.IO) { ImageStore.importImage(context, uri) }
-            if (img != null) { splitBodyAtCursor(); images.add(img) } else viewModel.notify("تعذّر إدراج الصورة")
+            if (img != null) insertBlock(ImageBlockUi(img)) else viewModel.notify("تعذّر إدراج الصورة")
         }
     }
 
     fun persist(silent: Boolean = false) {
         if (initialized) {
-            val json = DocSerializer.serialize(DocBundle(value.annotatedString, page, header.annotatedString, footer.annotatedString, tables.toList(), afterBody.annotatedString, images.toList()))
-            viewModel.save(title, json, value.annotatedString, page, header.annotatedString, footer.annotatedString, tables.toList(), afterBody.annotatedString, silent = silent)
+            val blocks = allBlocks()
+            val json = DocSerializer.serialize(DocBundle(value.annotatedString, page, header.annotatedString, footer.annotatedString, blocks = blocks))
+            viewModel.save(title, json, blocks, page, header.annotatedString, footer.annotatedString, silent = silent)
         }
     }
 
@@ -334,7 +381,7 @@ fun EditorScreen(
         snapshotFlow {
             listOf(
                 value.annotatedString, header.annotatedString, footer.annotatedString,
-                afterBody.annotatedString, page, title, tables.toList(), images.toList(),
+                page, title, extraBlocks.toList(),
             )
         }.drop(1).debounce(1500).collect { persist(silent = true) }
     }
@@ -350,18 +397,24 @@ fun EditorScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    // القيمة والتغيير حسب الحقل المركّز (المتن/الترويسة/التذييل)
+    // الكتلة النصية المركّزة ضمن extraBlocks (إن وُجدت)
+    val focusedExtraText = focusedExtra.takeIf { it in extraBlocks.indices }?.let { extraBlocks[it] as? TextBlockUi }
+    // القيمة والتغيير حسب الحقل المركّز (المتن/كتلة نصية/الترويسة/التذييل)
     val activeValue = when (focusTarget) {
-        EditField.Body -> value
         EditField.Header -> header
         EditField.Footer -> footer
-        EditField.AfterBody -> afterBody
+        EditField.Body -> focusedExtraText?.value ?: value
     }
     val activeOnChange: (TextFieldValue) -> Unit = when (focusTarget) {
-        EditField.Body -> { v -> update(v) }
         EditField.Header -> { v -> header = v }
         EditField.Footer -> { v -> footer = v }
-        EditField.AfterBody -> { v -> afterBody = v }
+        EditField.Body -> { v ->
+            if (focusedExtra in extraBlocks.indices && extraBlocks[focusedExtra] is TextBlockUi) {
+                extraBlocks[focusedExtra] = TextBlockUi(v)
+            } else {
+                update(v)
+            }
+        }
     }
 
     // أوامر التحرير (قص/نسخ/لصق/تحديد) على الحقل المركّز
@@ -505,7 +558,7 @@ fun EditorScreen(
             if (showInsertTable) {
                 InsertTableDialog(
                     onDismiss = { showInsertTable = false },
-                    onInsert = { r, c -> splitBodyAtCursor(); tables.add(TableOps.newTable(r, c)); showInsertTable = false },
+                    onInsert = { r, c -> insertBlock(TableBlockUi(TableOps.newTable(r, c))); showInsertTable = false },
                 )
             }
 
@@ -578,45 +631,23 @@ fun EditorScreen(
                                 onFooterChange = { footer = it },
                                 hfEditing = hfEditing,
                                 onStartEditHF = { field -> hfEditing = field; focusTarget = field },
-                                onBodyFocus = { focusTarget = EditField.Body; hfEditing = null },
+                                onBodyFocus = { focusTarget = EditField.Body; hfEditing = null; focusedExtra = -1 },
                                 onSheetHeight = { sheetHeightPx = it },
                             )
                         }
-                        if (tables.isNotEmpty()) {
-                            TablesEditor(
-                                tables = tables,
-                                onChange = { i, t -> tables[i] = t },
-                                onDelete = { i -> tables.removeAt(i) },
-                            )
-                        }
-                        if (images.isNotEmpty()) {
-                            ImagesEditor(
-                                images = images,
-                                onResize = { i, im -> images[i] = im },
-                                onDelete = { i -> ImageStore.delete(images[i].path); images.removeAt(i) },
-                            )
-                        }
-                        // النص الذي يلي الكتلة المُدرَجة (ما بعد المؤشر وقت الإدراج)
-                        if (afterBody.text.isNotEmpty() || tables.isNotEmpty() || images.isNotEmpty()) {
-                            BasicTextField(
-                                value = afterBody,
-                                onValueChange = { afterBody = it },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(min = 80.dp)
-                                    .background(Color.White)
-                                    .padding(8.dp)
-                                    .onFocusChanged { if (it.isFocused) { focusTarget = EditField.AfterBody; hfEditing = null } },
-                                textStyle = TextStyle(fontSize = 16.sp, color = Color(0xFF1A1A1A)),
-                                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                                decorationBox = { inner ->
-                                    if (afterBody.text.isEmpty()) {
-                                        Text("تابع الكتابة بعد الكتلة…", color = Color(0xFFBBBBBB), textAlign = TextAlign.Right, modifier = Modifier.fillMaxWidth())
-                                    }
-                                    inner()
-                                },
-                            )
-                        }
+                        // كتل ما بعد المتن بالترتيب (نص/جدول/صورة) — المحرّك الكتلي
+                        DocumentBlocks(
+                            blocks = extraBlocks,
+                            onTextChange = { i, v -> extraBlocks[i] = TextBlockUi(v) },
+                            onTextFocus = { i -> focusedExtra = i; focusTarget = EditField.Body; hfEditing = null },
+                            onTableChange = { i, t -> extraBlocks[i] = TableBlockUi(t) },
+                            onImageResize = { i, im -> extraBlocks[i] = ImageBlockUi(im) },
+                            onDelete = { i ->
+                                (extraBlocks[i] as? ImageBlockUi)?.let { ImageStore.delete(it.img.path) }
+                                extraBlocks.removeAt(i)
+                                if (focusedExtra >= extraBlocks.size) focusedExtra = -1
+                            },
+                        )
                         Spacer(Modifier.height(24.dp))
                     }
                   }
@@ -866,8 +897,8 @@ fun arabicDigits(n: Int): String {
     return n.toString().map { if (it in '0'..'9') ar[it - '0'] else it }.joinToString("")
 }
 
-/** الحقل القابل للتنسيق: المتن أو الترويسة أو التذييل أو نص ما بعد الجدول. */
-enum class EditField { Body, Header, Footer, AfterBody }
+/** الحقل القابل للتنسيق: المتن (أو كتلة نصية) أو الترويسة أو التذييل. */
+enum class EditField { Body, Header, Footer }
 
 /**
  * حقل ترويسة/تذييل: مقفل وخافت افتراضياً، ولا يُحرَّر إلا بنقر مزدوج (مثل Word/WPS).
@@ -1190,146 +1221,155 @@ private fun StepperRow(label: String, value: Int, onMinus: () -> Unit, onPlus: (
     }
 }
 
-/** محرّر الصور المُدرَجة: عرض + تكبير/تصغير (بحفظ النسبة) + حذف. */
+/** يعرض كتل ما بعد المتن بالترتيب (نص قابل للتحرير/جدول/صورة) — المحرّك الكتلي. */
 @Composable
-private fun ImagesEditor(
-    images: List<DocImage>,
-    onResize: (index: Int, image: DocImage) -> Unit,
-    onDelete: (index: Int) -> Unit,
+private fun DocumentBlocks(
+    blocks: List<BlockUi>,
+    onTextChange: (Int, TextFieldValue) -> Unit,
+    onTextFocus: (Int) -> Unit,
+    onTableChange: (Int, TableData) -> Unit,
+    onImageResize: (Int, DocImage) -> Unit,
+    onDelete: (Int) -> Unit,
 ) {
-    Column(Modifier.fillMaxWidth().padding(top = 12.dp)) {
-        images.forEachIndexed { i, im ->
-            val bmp = remember(im.path) { ImageStore.decode(im.path)?.asImageBitmap() }
-            Card(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-                Column(Modifier.padding(8.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Image, "صورة", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Spacer(Modifier.width(8.dp))
-                        val ratio = if (im.widthPt > 0) im.heightPt / im.widthPt else 0.75f
-                        TextButton(onClick = {
-                            val w = (im.widthPt - 40f).coerceAtLeast(60f)
-                            onResize(i, im.copy(widthPt = w, heightPt = w * ratio))
-                        }) { Text("− تصغير") }
-                        TextButton(onClick = {
-                            val w = (im.widthPt + 40f).coerceAtMost(1200f)
-                            onResize(i, im.copy(widthPt = w, heightPt = w * ratio))
-                        }) { Text("+ تكبير") }
-                        Spacer(Modifier.weight(1f))
-                        TextButton(onClick = { onDelete(i) }) { Text("حذف", color = MaterialTheme.colorScheme.error) }
-                    }
-                    Spacer(Modifier.height(6.dp))
-                    if (bmp != null) {
-                        Image(
-                            bitmap = bmp,
-                            contentDescription = "صورة مُدرَجة",
-                            modifier = Modifier.width(im.widthPt.dp).height(im.heightPt.dp),
-                        )
-                    } else {
-                        Text("تعذّر عرض الصورة", color = MaterialTheme.colorScheme.error)
-                    }
-                }
+    Column(Modifier.fillMaxWidth()) {
+        blocks.forEachIndexed { i, b ->
+            when (b) {
+                is TextBlockUi -> BasicTextField(
+                    value = b.value,
+                    onValueChange = { onTextChange(i, it) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .background(Color.White)
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                        .onFocusChanged { if (it.isFocused) onTextFocus(i) },
+                    textStyle = TextStyle(fontSize = 16.sp, color = Color(0xFF1A1A1A)),
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                    decorationBox = { inner ->
+                        if (b.value.text.isEmpty()) {
+                            Text("تابع الكتابة…", color = Color(0xFFBBBBBB), textAlign = TextAlign.Right, modifier = Modifier.fillMaxWidth())
+                        }
+                        inner()
+                    },
+                )
+                is TableBlockUi -> TableBlockEditor(b.data, { onTableChange(i, it) }, { onDelete(i) })
+                is ImageBlockUi -> ImageBlockCard(b.img, { onImageResize(i, it) }, { onDelete(i) })
             }
         }
     }
 }
 
-/** محرّر الجداول: خلايا قابلة للتحرير + محاذاة لكل خلية + إضافة/حذف صفوف وأعمدة. */
+/** بطاقة صورة مُدرَجة: عرض + تكبير/تصغير (بحفظ النسبة) + حذف. */
 @Composable
-private fun TablesEditor(
-    tables: List<TableData>,
-    onChange: (index: Int, table: TableData) -> Unit,
-    onDelete: (index: Int) -> Unit,
-) {
-    // الخلية المحدّدة حالياً (جدول، صف، عمود) لتطبيق المحاذاة عليها
-    var sel by remember { mutableStateOf(Triple(-1, -1, -1)) }
-    Column(Modifier.fillMaxWidth().padding(top = 12.dp)) {
-        tables.forEachIndexed { ti, table ->
-            Card(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-                Column(Modifier.padding(8.dp)) {
-                    // شريط تحكم الجدول
-                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(onClick = { onChange(ti, TableOps.addRow(table)) }) { Text("+ صف") }
-                        TextButton(onClick = { onChange(ti, TableOps.addColumn(table)) }) { Text("+ عمود") }
-                        TextButton(onClick = { onChange(ti, TableOps.deleteRow(table, table.rowCount - 1)) }) { Text("− صف") }
-                        TextButton(onClick = { onChange(ti, TableOps.deleteColumn(table, table.colCount - 1)) }) { Text("− عمود") }
-                        TextButton(onClick = { onDelete(ti) }) { Text("حذف", color = MaterialTheme.colorScheme.error) }
-                    }
-                    // تحكّم الخلية/العمود المحدّد: محاذاة + عرض العمود
-                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
-                        val applyAlign: (Int) -> Unit = { a ->
-                            if (sel.first == ti && sel.second >= 0 && sel.third >= 0) {
-                                onChange(ti, TableOps.setCellAlign(table, sel.second, sel.third, a))
-                            }
+private fun ImageBlockCard(im: DocImage, onResize: (DocImage) -> Unit, onDelete: () -> Unit) {
+    val bmp = remember(im.path) { ImageStore.decode(im.path)?.asImageBitmap() }
+    Card(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+        Column(Modifier.padding(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Image, "صورة", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.width(8.dp))
+                val ratio = if (im.widthPt > 0) im.heightPt / im.widthPt else 0.75f
+                TextButton(onClick = {
+                    val w = (im.widthPt - 40f).coerceAtLeast(60f)
+                    onResize(im.copy(widthPt = w, heightPt = w * ratio))
+                }) { Text("− تصغير") }
+                TextButton(onClick = {
+                    val w = (im.widthPt + 40f).coerceAtMost(1200f)
+                    onResize(im.copy(widthPt = w, heightPt = w * ratio))
+                }) { Text("+ تكبير") }
+                Spacer(Modifier.weight(1f))
+                TextButton(onClick = onDelete) { Text("حذف", color = MaterialTheme.colorScheme.error) }
+            }
+            Spacer(Modifier.height(6.dp))
+            if (bmp != null) {
+                Image(bitmap = bmp, contentDescription = "صورة مُدرَجة", modifier = Modifier.width(im.widthPt.dp).height(im.heightPt.dp))
+            } else {
+                Text("تعذّر عرض الصورة", color = MaterialTheme.colorScheme.error)
+            }
+        }
+    }
+}
+
+/** محرّر جدول واحد: خلايا قابلة للتحرير + محاذاة/عرض/دمج/تنسيق لكل خلية. */
+@Composable
+private fun TableBlockEditor(table: TableData, onChange: (TableData) -> Unit, onDelete: () -> Unit) {
+    var sel by remember { mutableStateOf(Pair(-1, -1)) } // صف، عمود
+    val valid = sel.first >= 0 && sel.second >= 0
+    Card(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+        Column(Modifier.padding(8.dp)) {
+            // شريط تحكم الجدول
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = { onChange(TableOps.addRow(table)) }) { Text("+ صف") }
+                TextButton(onClick = { onChange(TableOps.addColumn(table)) }) { Text("+ عمود") }
+                TextButton(onClick = { onChange(TableOps.deleteRow(table, table.rowCount - 1)) }) { Text("− صف") }
+                TextButton(onClick = { onChange(TableOps.deleteColumn(table, table.colCount - 1)) }) { Text("− عمود") }
+                TextButton(onClick = onDelete) { Text("حذف", color = MaterialTheme.colorScheme.error) }
+            }
+            // محاذاة + عرض العمود + دمج/فصل
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
+                val applyAlign: (Int) -> Unit = { a -> if (valid) onChange(TableOps.setCellAlign(table, sel.first, sel.second, a)) }
+                IconButton(onClick = { applyAlign(3) }) { Icon(Icons.AutoMirrored.Filled.FormatAlignRight, "يمين") }
+                IconButton(onClick = { applyAlign(1) }) { Icon(Icons.Default.FormatAlignCenter, "توسيط") }
+                IconButton(onClick = { applyAlign(2) }) { Icon(Icons.AutoMirrored.Filled.FormatAlignLeft, "يسار") }
+                Box(Modifier.width(1.dp).height(20.dp).background(MaterialTheme.colorScheme.outlineVariant))
+                TextButton(onClick = { if (sel.second >= 0) onChange(TableOps.widenColumn(table, sel.second, -0.2f)) }) { Text("− عرض") }
+                TextButton(onClick = { if (sel.second >= 0) onChange(TableOps.widenColumn(table, sel.second, 0.2f)) }) { Text("+ عرض") }
+                Box(Modifier.width(1.dp).height(20.dp).background(MaterialTheme.colorScheme.outlineVariant))
+                TextButton(onClick = { if (valid) onChange(TableOps.mergeRight(table, sel.first, sel.second)) }) { Text("دمج ←") }
+                TextButton(onClick = { if (valid) onChange(TableOps.splitCell(table, sel.first, sel.second)) }) { Text("فصل") }
+            }
+            // تنسيق الخلية: غامق + حجم + لون
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
+                val selCell = if (valid && sel.first in table.rows.indices) table.rows[sel.first].getOrNull(sel.second) else null
+                IconButton(onClick = { selCell?.let { onChange(TableOps.setCellBold(table, sel.first, sel.second, !it.bold)) } }) {
+                    Icon(Icons.Default.FormatBold, "غامق", tint = if (selCell?.bold == true) MaterialTheme.colorScheme.primary else LocalContentColor.current)
+                }
+                TextButton(onClick = { selCell?.let { onChange(TableOps.setCellSize(table, sel.first, sel.second, (if (it.size > 0) it.size else 14) - 2)) } }) { Text("ص−") }
+                TextButton(onClick = { selCell?.let { onChange(TableOps.setCellSize(table, sel.first, sel.second, (if (it.size > 0) it.size else 14) + 2)) } }) { Text("ص+") }
+                Spacer(Modifier.width(4.dp))
+                listOf(0L, 0xFFD32F2FL, 0xFF1565C0L, 0xFF2E7D32L, 0xFF000000L).forEach { col ->
+                    Box(
+                        Modifier.padding(2.dp).size(22.dp)
+                            .background(if (col == 0L) Color.Transparent else Color(col), CircleShape)
+                            .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
+                            .clickable { if (valid) onChange(TableOps.setCellColor(table, sel.first, sel.second, col)) },
+                        contentAlignment = Alignment.Center,
+                    ) { if (col == 0L) Text("∅", fontSize = 12.sp) }
+                }
+            }
+            // الخلايا (تخطّي الخلايا المغطّاة بالدمج + امتداد الوزن)
+            table.rows.forEachIndexed { r, row ->
+                Row(Modifier.fillMaxWidth()) {
+                    var c = 0
+                    while (c < row.size) {
+                        val cell = row[c]
+                        val span = cell.span.coerceIn(1, row.size - c)
+                        val wsum = (c until c + span).sumOf { table.weightOf(it).toDouble() }.toFloat()
+                        val ta = when (cell.align) {
+                            1 -> TextAlign.Center
+                            2 -> TextAlign.Left
+                            3 -> TextAlign.Right
+                            else -> TextAlign.Right
                         }
-                        IconButton(onClick = { applyAlign(3) }) { Icon(Icons.AutoMirrored.Filled.FormatAlignRight, "يمين") }
-                        IconButton(onClick = { applyAlign(1) }) { Icon(Icons.Default.FormatAlignCenter, "توسيط") }
-                        IconButton(onClick = { applyAlign(2) }) { Icon(Icons.AutoMirrored.Filled.FormatAlignLeft, "يسار") }
-                        Box(Modifier.width(1.dp).height(20.dp).background(MaterialTheme.colorScheme.outlineVariant))
-                        val widen: (Float) -> Unit = { d ->
-                            if (sel.first == ti && sel.third >= 0) onChange(ti, TableOps.widenColumn(table, sel.third, d))
-                        }
-                        TextButton(onClick = { widen(-0.2f) }) { Text("− عرض") }
-                        TextButton(onClick = { widen(0.2f) }) { Text("+ عرض") }
-                        Box(Modifier.width(1.dp).height(20.dp).background(MaterialTheme.colorScheme.outlineVariant))
-                        TextButton(onClick = { if (sel.first == ti && sel.second >= 0 && sel.third >= 0) onChange(ti, TableOps.mergeRight(table, sel.second, sel.third)) }) { Text("دمج ←") }
-                        TextButton(onClick = { if (sel.first == ti && sel.second >= 0 && sel.third >= 0) onChange(ti, TableOps.splitCell(table, sel.second, sel.third)) }) { Text("فصل") }
-                    }
-                    // تنسيق الخلية المحدّدة: غامق + حجم + لون
-                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
-                        val selCell = if (sel.first == ti && sel.second in table.rows.indices && sel.third >= 0)
-                            table.rows[sel.second].getOrNull(sel.third) else null
-                        val onSel: (TableData) -> Unit = { t -> if (sel.first == ti) onChange(ti, t) }
-                        IconButton(onClick = { selCell?.let { onSel(TableOps.setCellBold(table, sel.second, sel.third, !it.bold)) } }) {
-                            Icon(Icons.Default.FormatBold, "غامق", tint = if (selCell?.bold == true) MaterialTheme.colorScheme.primary else LocalContentColor.current)
-                        }
-                        TextButton(onClick = { selCell?.let { onSel(TableOps.setCellSize(table, sel.second, sel.third, (if (it.size > 0) it.size else 14) - 2)) } }) { Text("ص−") }
-                        TextButton(onClick = { selCell?.let { onSel(TableOps.setCellSize(table, sel.second, sel.third, (if (it.size > 0) it.size else 14) + 2)) } }) { Text("ص+") }
-                        Spacer(Modifier.width(4.dp))
-                        listOf(0L to "افتراضي", 0xFFD32F2FL to "أحمر", 0xFF1565C0L to "أزرق", 0xFF2E7D32L to "أخضر", 0xFF000000L to "أسود").forEach { (col, _) ->
-                            Box(
-                                Modifier.padding(2.dp).size(22.dp)
-                                    .background(if (col == 0L) Color.Transparent else Color(col), CircleShape)
-                                    .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
-                                    .clickable { if (sel.first == ti && sel.second >= 0 && sel.third >= 0) onChange(ti, TableOps.setCellColor(table, sel.second, sel.third, col)) },
-                                contentAlignment = Alignment.Center,
-                            ) { if (col == 0L) Text("∅", fontSize = 12.sp) }
-                        }
-                    }
-                    // الخلايا (مع تخطّي الخلايا المغطّاة بالدمج وامتداد الوزن)
-                    table.rows.forEachIndexed { r, row ->
-                        Row(Modifier.fillMaxWidth()) {
-                            var c = 0
-                            while (c < row.size) {
-                                val cell = row[c]
-                                val span = cell.span.coerceIn(1, row.size - c)
-                                val wsum = (c until c + span).sumOf { table.weightOf(it).toDouble() }.toFloat()
-                                val ta = when (cell.align) {
-                                    1 -> TextAlign.Center
-                                    2 -> TextAlign.Left
-                                    3 -> TextAlign.Right
-                                    else -> TextAlign.Right
-                                }
-                                val cc = c
-                                val selected = sel == Triple(ti, r, cc)
-                                OutlinedTextField(
-                                    value = cell.text,
-                                    onValueChange = { onChange(ti, TableOps.setCell(table, r, cc, it)) },
-                                    singleLine = false,
-                                    textStyle = TextStyle(
-                                        fontSize = (if (cell.size > 0) cell.size else 14).sp,
-                                        textAlign = ta,
-                                        fontWeight = if (cell.bold) FontWeight.Bold else null,
-                                        color = if (cell.color != 0L) Color(cell.color) else Color.Unspecified,
-                                    ),
-                                    label = if (selected) ({ Text(if (span > 1) "محدّدة (مدموجة ×$span)" else "محدّدة") }) else null,
-                                    modifier = Modifier
-                                        .weight(wsum)
-                                        .padding(2.dp)
-                                        .onFocusChanged { if (it.isFocused) sel = Triple(ti, r, cc) },
-                                )
-                                c += span
-                            }
-                        }
+                        val cc = c
+                        val selected = sel == Pair(r, cc)
+                        OutlinedTextField(
+                            value = cell.text,
+                            onValueChange = { onChange(TableOps.setCell(table, r, cc, it)) },
+                            singleLine = false,
+                            textStyle = TextStyle(
+                                fontSize = (if (cell.size > 0) cell.size else 14).sp,
+                                textAlign = ta,
+                                fontWeight = if (cell.bold) FontWeight.Bold else null,
+                                color = if (cell.color != 0L) Color(cell.color) else Color.Unspecified,
+                            ),
+                            label = if (selected) ({ Text(if (span > 1) "محدّدة (مدموجة ×$span)" else "محدّدة") }) else null,
+                            modifier = Modifier
+                                .weight(wsum)
+                                .padding(2.dp)
+                                .onFocusChanged { if (it.isFocused) sel = Pair(r, cc) },
+                        )
+                        c += span
                     }
                 }
             }
