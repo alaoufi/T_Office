@@ -72,6 +72,7 @@ class EditorViewModel @Inject constructor(
         footer: AnnotatedString,
         tables: List<com.toffice.app.feature.editor.model.TableData> = emptyList(),
         afterBody: AnnotatedString = AnnotatedString(""),
+        silent: Boolean = false,
     ) {
         viewModelScope.launch {
             val existing = if (docId > 0) dao.getById(docId) else null
@@ -87,8 +88,9 @@ class EditorViewModel @Inject constructor(
             val src = sourceUri
             if (src != null) {
                 val ok = writeDocxTo(Uri.parse(src), annotated, page, header, footer, tables, afterBody)
-                _events.emit(if (ok) "تم الحفظ في ملف Word الأصلي" else "تم الحفظ داخلياً (تعذّر الكتابة على الملف الأصلي)")
-            } else {
+                // الحفظ التلقائي صامت حتى لا يُزعج المستخدم برسائل متكرّرة
+                if (!silent) _events.emit(if (ok) "تم الحفظ في ملف Word الأصلي" else "تم الحفظ داخلياً (تعذّر الكتابة على الملف الأصلي)")
+            } else if (!silent) {
                 _events.emit("تم الحفظ")
             }
         }

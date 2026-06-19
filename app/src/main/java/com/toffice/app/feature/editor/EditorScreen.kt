@@ -285,10 +285,10 @@ fun EditorScreen(
         if (uri != null) viewModel.exportText(uri, value.text)
     }
 
-    fun persist() {
+    fun persist(silent: Boolean = false) {
         if (initialized) {
             val json = DocSerializer.serialize(DocBundle(value.annotatedString, page, header.annotatedString, footer.annotatedString, tables.toList(), afterBody.annotatedString))
-            viewModel.save(title, json, value.annotatedString, page, header.annotatedString, footer.annotatedString, tables.toList(), afterBody.annotatedString)
+            viewModel.save(title, json, value.annotatedString, page, header.annotatedString, footer.annotatedString, tables.toList(), afterBody.annotatedString, silent = silent)
         }
     }
 
@@ -300,12 +300,12 @@ fun EditorScreen(
                 value.annotatedString, header.annotatedString, footer.annotatedString,
                 afterBody.annotatedString, page, title, tables.toList(),
             )
-        }.drop(1).debounce(1500).collect { persist() }
+        }.drop(1).debounce(1500).collect { persist(silent = true) }
     }
 
     // حفظ فوري عند مغادرة التطبيق/الشاشة (الخلفية) حتى لا يضيع أي تعديل
     val lifecycleOwner = LocalLifecycleOwner.current
-    val saveNow by rememberUpdatedState { persist() }
+    val saveNow by rememberUpdatedState { persist(silent = true) }
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_STOP || event == Lifecycle.Event.ON_PAUSE) saveNow()
