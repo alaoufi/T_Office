@@ -60,6 +60,10 @@ val FONT_DEFS: List<FontDef> = listOf(
     FontDef(20, "ركّاس", "Rakkas", com.toffice.app.R.font.rakkas),
     FontDef(21, "ميرزا", "Mirza", com.toffice.app.R.font.mirza),
     FontDef(22, "جمهورية", "Jomhuria", com.toffice.app.R.font.jomhuria),
+    // مكافئات مفتوحة تُصدَّر بأسماء وورد الأصلية
+    FontDef(23, "Arial", "Arial", com.toffice.app.R.font.arimo),
+    FontDef(24, "Times New Roman", "Times New Roman", com.toffice.app.R.font.tinos),
+    FontDef(25, "Simplified Arabic", "Simplified Arabic", com.toffice.app.R.font.noto_sans_arabic),
 )
 
 /** خريطة الرمز → اسم العرض (لشريط الأدوات). */
