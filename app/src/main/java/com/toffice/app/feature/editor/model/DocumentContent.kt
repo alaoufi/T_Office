@@ -57,6 +57,9 @@ fun PageSettings.currentPresetId(): String {
 }
 
 /** المستند الكامل: المتن المنسّق + إعدادات الصفحة + الترويسة + التذييل + الجداول. */
+/** صورة مُدرَجة: مسار ملف محلي (نسخة داخلية أوفلاين) + أبعاد العرض بالنقاط. */
+data class DocImage(val path: String, val widthPt: Float = 240f, val heightPt: Float = 180f)
+
 data class DocBundle(
     val body: AnnotatedString,
     val page: PageSettings = PageSettings(),
@@ -64,6 +67,7 @@ data class DocBundle(
     val footer: AnnotatedString = AnnotatedString(""),
     val tables: List<TableData> = emptyList(),
     val afterBody: AnnotatedString = AnnotatedString(""),
+    val images: List<DocImage> = emptyList(),
 )
 
 /** تسلسل المستند الكامل إلى/من JSON (صيغة التطبيق الداخلية). */
@@ -87,7 +91,27 @@ object DocSerializer {
             .put("footer", JSONObject(annotatedToJson(bundle.footer)))
             .put("tables", TableOps.toJson(bundle.tables))
             .put("after", JSONObject(annotatedToJson(bundle.afterBody)))
+            .put("images", imagesToJson(bundle.images))
             .toString()
+    }
+
+    private fun imagesToJson(images: List<DocImage>): org.json.JSONArray {
+        val arr = org.json.JSONArray()
+        for (im in images) {
+            arr.put(JSONObject().put("p", im.path).put("w", im.widthPt.toDouble()).put("h", im.heightPt.toDouble()))
+        }
+        return arr
+    }
+
+    private fun imagesFromJson(arr: org.json.JSONArray?): List<DocImage> {
+        if (arr == null) return emptyList()
+        val list = mutableListOf<DocImage>()
+        for (i in 0 until arr.length()) {
+            val o = arr.optJSONObject(i) ?: continue
+            val p = o.optString("p", "")
+            if (p.isNotEmpty()) list.add(DocImage(p, o.optDouble("w", 240.0).toFloat(), o.optDouble("h", 180.0).toFloat()))
+        }
+        return list
     }
 
     /** يقرأ حقلاً منسّقاً (الصيغة الجديدة JSONObject) مع توافق مع الصيغة القديمة (نص عادي). */
@@ -130,6 +154,7 @@ object DocSerializer {
             footer = parseRich(obj, "footer"),
             tables = TableOps.fromJson(obj.optJSONArray("tables")),
             afterBody = parseRich(obj, "after"),
+            images = imagesFromJson(obj.optJSONArray("images")),
         )
     }
 }

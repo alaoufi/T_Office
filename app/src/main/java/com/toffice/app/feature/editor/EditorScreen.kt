@@ -4,8 +4,17 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
+import com.toffice.app.feature.editor.io.ImageStore
+import com.toffice.app.feature.editor.model.DocImage
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -192,6 +201,7 @@ fun EditorScreen(
     var header by remember { mutableStateOf(TextFieldValue()) }
     var footer by remember { mutableStateOf(TextFieldValue()) }
     val tables = remember { mutableStateListOf<TableData>() }
+    val images = remember { mutableStateListOf<DocImage>() }
     var afterBody by remember { mutableStateOf(TextFieldValue()) }
     var showInsertTable by remember { mutableStateOf(false) }
 
@@ -238,6 +248,7 @@ fun EditorScreen(
             header = TextFieldValue(bundle.header)
             footer = TextFieldValue(bundle.footer)
             tables.clear(); tables.addAll(bundle.tables)
+            images.clear(); images.addAll(bundle.images)
             afterBody = TextFieldValue(bundle.afterBody)
             initialized = true
         }
@@ -265,6 +276,7 @@ fun EditorScreen(
             header = TextFieldValue(bundle.header)
             footer = TextFieldValue(bundle.footer)
             tables.clear(); tables.addAll(bundle.tables)
+            images.clear(); images.addAll(bundle.images)
             afterBody = TextFieldValue(bundle.afterBody)
             undoStack.clear()
             redoStack.clear()
@@ -285,10 +297,20 @@ fun EditorScreen(
     ) { uri ->
         if (uri != null) viewModel.exportText(uri, value.text)
     }
+    val context = LocalContext.current
+    val imageScope = rememberCoroutineScope()
+    val imageLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) imageScope.launch {
+            val img = withContext(Dispatchers.IO) { ImageStore.importImage(context, uri) }
+            if (img != null) images.add(img) else viewModel.notify("تعذّر إدراج الصورة")
+        }
+    }
 
     fun persist(silent: Boolean = false) {
         if (initialized) {
-            val json = DocSerializer.serialize(DocBundle(value.annotatedString, page, header.annotatedString, footer.annotatedString, tables.toList(), afterBody.annotatedString))
+            val json = DocSerializer.serialize(DocBundle(value.annotatedString, page, header.annotatedString, footer.annotatedString, tables.toList(), afterBody.annotatedString, images.toList()))
             viewModel.save(title, json, value.annotatedString, page, header.annotatedString, footer.annotatedString, tables.toList(), afterBody.annotatedString, silent = silent)
         }
     }
@@ -299,7 +321,7 @@ fun EditorScreen(
         snapshotFlow {
             listOf(
                 value.annotatedString, header.annotatedString, footer.annotatedString,
-                afterBody.annotatedString, page, title, tables.toList(),
+                afterBody.annotatedString, page, title, tables.toList(), images.toList(),
             )
         }.drop(1).debounce(1500).collect { persist(silent = true) }
     }
@@ -421,6 +443,7 @@ fun EditorScreen(
                         },
                         onInsertText = { activeOnChange(RichTextOps.replaceSelection(activeValue, it)) },
                         onInsertTable = { showInsertTable = true },
+                        onInsertImage = { imageLauncher.launch("image/*") },
                         onClose = { persist(); onBack() },
                     )
                     FormatToolbar(value = activeValue, onChange = activeOnChange)
@@ -570,6 +593,13 @@ fun EditorScreen(
                                     }
                                     inner()
                                 },
+                            )
+                        }
+                        if (images.isNotEmpty()) {
+                            ImagesEditor(
+                                images = images,
+                                onResize = { i, im -> images[i] = im },
+                                onDelete = { i -> ImageStore.delete(images[i].path); images.removeAt(i) },
                             )
                         }
                         Spacer(Modifier.height(24.dp))
@@ -983,6 +1013,7 @@ private fun EditorMenuBar(
     onDelete: () -> Unit,
     onInsertText: (String) -> Unit,
     onInsertTable: () -> Unit,
+    onInsertImage: () -> Unit,
     onClose: () -> Unit,
 ) {
     Box(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)) {
@@ -1047,7 +1078,7 @@ private fun EditorMenuBar(
             MenuRow("إدراج الوقت", Icons.Default.Schedule) { close(); onInsertText(currentTimeString()) }
             HorizontalDivider()
             MenuRow("جدول", Icons.Default.TableChart) { close(); onInsertTable() }
-            MenuRow("صورة (قريباً)", Icons.Default.Image, enabled = false) { }
+            MenuRow("صورة", Icons.Default.Image) { close(); onInsertImage() }
         }
         MenuBarMenu("تخطيط", openMenu, onOpenMenu) { close ->
             MenuRow("الهوامش / الحجم / الاتجاه", Icons.Default.AspectRatio) { close(); onPageSetup() }
@@ -1141,6 +1172,49 @@ private fun StepperRow(label: String, value: Int, onMinus: () -> Unit, onPlus: (
         IconButton(onClick = onMinus) { Icon(Icons.Default.Close, "−") }
         Text("$value", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 8.dp))
         IconButton(onClick = onPlus) { Icon(Icons.Default.Add, "+") }
+    }
+}
+
+/** محرّر الصور المُدرَجة: عرض + تكبير/تصغير (بحفظ النسبة) + حذف. */
+@Composable
+private fun ImagesEditor(
+    images: List<DocImage>,
+    onResize: (index: Int, image: DocImage) -> Unit,
+    onDelete: (index: Int) -> Unit,
+) {
+    Column(Modifier.fillMaxWidth().padding(top = 12.dp)) {
+        images.forEachIndexed { i, im ->
+            val bmp = remember(im.path) { ImageStore.decode(im.path)?.asImageBitmap() }
+            Card(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                Column(Modifier.padding(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Image, "صورة", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.width(8.dp))
+                        val ratio = if (im.widthPt > 0) im.heightPt / im.widthPt else 0.75f
+                        TextButton(onClick = {
+                            val w = (im.widthPt - 40f).coerceAtLeast(60f)
+                            onResize(i, im.copy(widthPt = w, heightPt = w * ratio))
+                        }) { Text("− تصغير") }
+                        TextButton(onClick = {
+                            val w = (im.widthPt + 40f).coerceAtMost(1200f)
+                            onResize(i, im.copy(widthPt = w, heightPt = w * ratio))
+                        }) { Text("+ تكبير") }
+                        Spacer(Modifier.weight(1f))
+                        TextButton(onClick = { onDelete(i) }) { Text("حذف", color = MaterialTheme.colorScheme.error) }
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    if (bmp != null) {
+                        Image(
+                            bitmap = bmp,
+                            contentDescription = "صورة مُدرَجة",
+                            modifier = Modifier.width(im.widthPt.dp).height(im.heightPt.dp),
+                        )
+                    } else {
+                        Text("تعذّر عرض الصورة", color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            }
+        }
     }
 }
 
