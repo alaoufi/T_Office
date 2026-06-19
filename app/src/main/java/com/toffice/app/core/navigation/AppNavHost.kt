@@ -16,7 +16,7 @@ import com.toffice.app.feature.tasks.TasksScreen
 
 @Composable
 fun AppNavHost(navController: NavHostController = rememberNavController()) {
-    NavHost(navController = navController, startDestination = Routes.DASHBOARD) {
+    NavHost(navController = navController, startDestination = Routes.EDITOR) {
         composable(Routes.DASHBOARD) {
             DashboardScreen(onOpenModule = { route -> navController.navigate(route) })
         }
@@ -39,8 +39,9 @@ fun AppNavHost(navController: NavHostController = rememberNavController()) {
             PlaceholderScreen(title = "الملفات والمستندات", onBack = { navController.popBackStack() })
         }
         composable(Routes.EDITOR) {
+            // شاشة البداية: قائمة مستندات Word. زر الرجوع يفتح لوحة الوحدات الأخرى.
             DocumentsListScreen(
-                onBack = { navController.popBackStack() },
+                onBack = { navController.navigate(Routes.DASHBOARD) },
                 onOpenDocument = { id -> navController.navigate(Routes.editorDoc(id)) },
             )
         }
