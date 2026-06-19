@@ -9,6 +9,7 @@ import androidx.compose.foundation.background
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.platform.LocalContext
 import com.toffice.app.feature.editor.io.ImageStore
 import com.toffice.app.feature.editor.model.DocImage
@@ -266,6 +267,18 @@ fun EditorScreen(
     var findQuery by remember { mutableStateOf("") }
     var replaceQuery by remember { mutableStateOf("") }
 
+    // إدراج كتلة (جدول/صورة) في موضع المؤشر: يُقسَّم المتن عند المؤشر، وما بعده ينتقل لما بعد الكتلة
+    fun splitBodyAtCursor() {
+        if (focusTarget != EditField.Body) return
+        val full = value.annotatedString
+        val cur = value.selection.start.coerceIn(0, full.length)
+        val after = full.subSequence(cur, full.length)
+        if (after.isEmpty()) return
+        val combined = buildAnnotatedString { append(after); append(afterBody.annotatedString) }
+        update(TextFieldValue(full.subSequence(0, cur)))
+        afterBody = TextFieldValue(combined)
+    }
+
     val openLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
@@ -304,7 +317,7 @@ fun EditorScreen(
     ) { uri ->
         if (uri != null) imageScope.launch {
             val img = withContext(Dispatchers.IO) { ImageStore.importImage(context, uri) }
-            if (img != null) images.add(img) else viewModel.notify("تعذّر إدراج الصورة")
+            if (img != null) { splitBodyAtCursor(); images.add(img) } else viewModel.notify("تعذّر إدراج الصورة")
         }
     }
 
@@ -492,7 +505,7 @@ fun EditorScreen(
             if (showInsertTable) {
                 InsertTableDialog(
                     onDismiss = { showInsertTable = false },
-                    onInsert = { r, c -> tables.add(TableOps.newTable(r, c)); showInsertTable = false },
+                    onInsert = { r, c -> splitBodyAtCursor(); tables.add(TableOps.newTable(r, c)); showInsertTable = false },
                 )
             }
 
@@ -575,7 +588,16 @@ fun EditorScreen(
                                 onChange = { i, t -> tables[i] = t },
                                 onDelete = { i -> tables.removeAt(i) },
                             )
-                            // نص أسفل الجدول (فوقه = المتن، فالجدول، فهذا)
+                        }
+                        if (images.isNotEmpty()) {
+                            ImagesEditor(
+                                images = images,
+                                onResize = { i, im -> images[i] = im },
+                                onDelete = { i -> ImageStore.delete(images[i].path); images.removeAt(i) },
+                            )
+                        }
+                        // النص الذي يلي الكتلة المُدرَجة (ما بعد المؤشر وقت الإدراج)
+                        if (afterBody.text.isNotEmpty() || tables.isNotEmpty() || images.isNotEmpty()) {
                             BasicTextField(
                                 value = afterBody,
                                 onValueChange = { afterBody = it },
@@ -589,17 +611,10 @@ fun EditorScreen(
                                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                                 decorationBox = { inner ->
                                     if (afterBody.text.isEmpty()) {
-                                        Text("نص أسفل الجدول…", color = Color(0xFFBBBBBB), textAlign = TextAlign.Right, modifier = Modifier.fillMaxWidth())
+                                        Text("تابع الكتابة بعد الكتلة…", color = Color(0xFFBBBBBB), textAlign = TextAlign.Right, modifier = Modifier.fillMaxWidth())
                                     }
                                     inner()
                                 },
-                            )
-                        }
-                        if (images.isNotEmpty()) {
-                            ImagesEditor(
-                                images = images,
-                                onResize = { i, im -> images[i] = im },
-                                onDelete = { i -> ImageStore.delete(images[i].path); images.removeAt(i) },
                             )
                         }
                         Spacer(Modifier.height(24.dp))
