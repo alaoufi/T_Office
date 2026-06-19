@@ -15,8 +15,11 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.shape.GenericShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.runtime.remember
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -38,6 +41,10 @@ fun HorizontalRuler(
     marginRightPt: Float,
     scale: Float, // dp لكل نقطة
     rtl: Boolean = false,
+    firstIndentPt: Float = 0f,
+    leftIndentPt: Float = 0f,
+    maxIndentPt: Float = 0f,
+    onIndentChange: (firstPt: Float, leftPt: Float) -> Unit = { _, _ -> },
     onChange: (left: Float, right: Float) -> Unit,
 ) {
     val density = LocalDensity.current.density
@@ -115,6 +122,36 @@ fun HorizontalRuler(
         ) { dxPx ->
             val deltaPt = dxPx / pxPerPt
             onChangeState(curLeft, (curRight - deltaPt).coerceIn(0f, pageWidthPt * 0.45f))
+        }
+        // علامتا المسافة البادئة للفقرة المركّزة: السطر الأول (أعلى) وبقية الأسطر (أسفل)
+        if (maxIndentPt > 0f) {
+            val originPt = if (rtl) pageWidthPt - marginRightPt else marginLeftPt
+            val sign = if (rtl) -1f else 1f
+            val curFirst by rememberUpdatedState(firstIndentPt)
+            val curLeft2 by rememberUpdatedState(leftIndentPt)
+            val onIndentState by rememberUpdatedState(onIndentChange)
+            val halfTriPx = (TRI_DP * density / 2f).roundToInt()
+            val bottomYPx = ((RULER_THICK_DP - TRI_DP) * density).roundToInt()
+            // علامة السطر الأول (مثلث للأسفل، أعلى المسطرة)
+            IndentHandle(
+                color = handleColor,
+                pointDown = true,
+                yPx = 0,
+                offsetXProvider = { ((originPt + sign * curFirst) * pxPerPt).roundToInt() - halfTriPx },
+            ) { dxPx ->
+                val d = sign * dxPx / pxPerPt
+                onIndentState((curFirst + d).coerceIn(0f, maxIndentPt), curLeft2)
+            }
+            // علامة بقية الأسطر (مثلث للأعلى، أسفل المسطرة)
+            IndentHandle(
+                color = handleColor,
+                pointDown = false,
+                yPx = bottomYPx,
+                offsetXProvider = { ((originPt + sign * curLeft2) * pxPerPt).roundToInt() - halfTriPx },
+            ) { dxPx ->
+                val d = sign * dxPx / pxPerPt
+                onIndentState(curFirst, (curLeft2 + d).coerceIn(0f, maxIndentPt))
+            }
         }
     }
     }
@@ -194,6 +231,41 @@ fun VerticalRuler(
 }
 
 private const val HANDLE_DP = 14
+private const val TRI_DP = 11
+
+/** علامة مسافة بادئة مثلّثة قابلة للسحب (للأسفل = سطر أول، للأعلى = بقية الأسطر). */
+@Composable
+private fun IndentHandle(
+    color: Color,
+    pointDown: Boolean,
+    yPx: Int,
+    offsetXProvider: () -> Int,
+    onDrag: (dxPx: Float) -> Unit,
+) {
+    val shape = remember(pointDown) {
+        GenericShape { s, _ ->
+            if (pointDown) {
+                moveTo(0f, 0f); lineTo(s.width, 0f); lineTo(s.width / 2f, s.height)
+            } else {
+                moveTo(s.width / 2f, 0f); lineTo(s.width, s.height); lineTo(0f, s.height)
+            }
+            close()
+        }
+    }
+    Box(
+        Modifier
+            .offset { IntOffset(offsetXProvider(), yPx) }
+            .size(TRI_DP.dp)
+            .clip(shape)
+            .background(color)
+            .pointerInput(Unit) {
+                detectDragGestures { change, dragAmount ->
+                    change.consume()
+                    onDrag(dragAmount.x)
+                }
+            },
+    )
+}
 
 @Composable
 private fun DragHandle(

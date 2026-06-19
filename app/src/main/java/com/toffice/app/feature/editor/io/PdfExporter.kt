@@ -22,7 +22,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDirection
 import com.toffice.app.feature.editor.model.CharAttrs
 import com.toffice.app.feature.editor.model.DEFAULT_FONT_SP
-import com.toffice.app.feature.editor.model.INDENT_STEP_PT
+import com.toffice.app.feature.editor.model.ParaIndent
 import com.toffice.app.feature.editor.model.PageSettings
 import com.toffice.app.feature.editor.model.paragraphSpans
 import com.toffice.app.feature.editor.model.toAligns
@@ -159,9 +159,10 @@ object PdfExporter {
                 }
                 val al = androidAlign(aligns.getOrElse(idx) { TextAlign.Start }, rtl)
                 sb.setSpan(AlignmentSpan.Standard(al), s, e, Spanned.SPAN_PARAGRAPH)
-                val level = indents.getOrElse(idx) { 0 }
-                if (level > 0) {
-                    sb.setSpan(LeadingMarginSpan.Standard(level * INDENT_STEP_PT), s, e, Spanned.SPAN_PARAGRAPH)
+                val ind = indents.getOrElse(idx) { ParaIndent() }
+                if (!ind.isZero) {
+                    // LeadingMarginSpan يقبل (السطر الأول، بقية الأسطر) بالبكسل
+                    sb.setSpan(LeadingMarginSpan.Standard(ind.firstPt.toInt(), ind.leftPt.toInt()), s, e, Spanned.SPAN_PARAGRAPH)
                 }
             }
         }

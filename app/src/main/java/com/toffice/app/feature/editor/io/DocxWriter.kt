@@ -2,7 +2,6 @@ package com.toffice.app.feature.editor.io
 
 import com.toffice.app.feature.editor.model.DocBlock
 import com.toffice.app.feature.editor.model.ImageBlock
-import com.toffice.app.feature.editor.model.INDENT_STEP_PT
 import com.toffice.app.feature.editor.model.PageSettings
 import com.toffice.app.feature.editor.model.ParaOut
 import com.toffice.app.feature.editor.model.RunOut
@@ -229,10 +228,14 @@ object DocxWriter {
         sb.append("<w:p><w:pPr>")
         if (rtl) sb.append("<w:bidi/>")
         sb.append("<w:jc w:val=\"").append(jc).append("\"/>")
-        // المسافة البادئة (من جهة بداية الفقرة، تحترم الاتجاه)
-        if (p.indentLevel > 0) {
-            val twips = p.indentLevel * INDENT_STEP_PT * 20
-            sb.append("<w:ind w:start=\"").append(twips).append("\"/>")
+        // المسافة البادئة (من جهة بداية الفقرة، تحترم الاتجاه): سطر أول/معلّقة
+        if (p.leftIndentPt > 0f || p.firstIndentPt > 0f) {
+            val startTw = (p.leftIndentPt * 20f).toInt()
+            val deltaTw = ((p.firstIndentPt - p.leftIndentPt) * 20f).toInt()
+            sb.append("<w:ind w:start=\"").append(startTw).append("\"")
+            if (deltaTw > 0) sb.append(" w:firstLine=\"").append(deltaTw).append("\"")
+            else if (deltaTw < 0) sb.append(" w:hanging=\"").append(-deltaTw).append("\"")
+            sb.append("/>")
         }
         // تباعد الأسطر (٢٤٠ = مفرد)
         if (p.lineSpacing != 1f) {

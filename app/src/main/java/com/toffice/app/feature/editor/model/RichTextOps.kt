@@ -4,6 +4,7 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDirection
+import kotlin.math.roundToInt
 
 /** عمليات التنسيق على محتوى المحرر (تعمل على التحديد الحالي). */
 object RichTextOps {
@@ -81,7 +82,7 @@ object RichTextOps {
     /** نسخة تتيح تعديل تباعد الأسطر والمسافة البادئة للفقرات. */
     private fun rebuildPara(
         v: TextFieldValue,
-        mutate: (MutableList<Float>, MutableList<Int>) -> Unit,
+        mutate: (MutableList<Float>, MutableList<ParaIndent>) -> Unit,
     ): TextFieldValue {
         val a = v.annotatedString
         val attrs = a.toCharAttrs()
@@ -471,14 +472,36 @@ object RichTextOps {
         }
     }
 
-    /** يزيد/ينقص مستوى المسافة البادئة للفقرات المحدّدة (delta = ‎+1/‎-1). */
+    /** يزيد/ينقص المسافة البادئة (السطر الأول + البقية معاً) للفقرات المحدّدة بخطوة ثابتة. */
     fun changeIndent(v: TextFieldValue, delta: Int): TextFieldValue {
+        val step = delta * INDENT_STEP_PT.toFloat()
         val (s, e) = bounds(v)
         return rebuildPara(v) { _, ind ->
             forEachSelectedParagraph(v.annotatedString.text, s, e) { idx ->
-                if (idx < ind.size) ind[idx] = (ind[idx] + delta).coerceIn(0, 12)
+                if (idx < ind.size) {
+                    val cur = ind[idx]
+                    val max = 12f * INDENT_STEP_PT
+                    ind[idx] = ParaIndent(
+                        (cur.firstPt + step).coerceIn(0f, max),
+                        (cur.leftPt + step).coerceIn(0f, max),
+                    )
+                }
             }
         }
+    }
+
+    /** يضبط المسافة البادئة (سطر أول/بقية بالنقاط) للفقرة عند المؤشر فقط (من المسطرة). */
+    fun setParagraphIndent(v: TextFieldValue, firstPt: Float, leftPt: Float): TextFieldValue {
+        val idx = paragraphIndexAt(v)
+        return rebuildPara(v) { _, ind ->
+            if (idx in ind.indices) ind[idx] = ParaIndent(firstPt.coerceAtLeast(0f), leftPt.coerceAtLeast(0f))
+        }
+    }
+
+    /** المسافة البادئة (سطر أول/بقية) للفقرة الحالية بالنقاط. */
+    fun currentParaIndent(v: TextFieldValue): ParaIndent {
+        val idx = paragraphIndexAt(v)
+        return v.annotatedString.toIndents().getOrElse(idx) { ParaIndent() }
     }
 
     /** تباعد الأسطر للفقرة الحالية. */
@@ -487,10 +510,10 @@ object RichTextOps {
         return v.annotatedString.toLineSpacings().getOrElse(idx) { 1f }
     }
 
-    /** مستوى المسافة البادئة للفقرة الحالية. */
+    /** مستوى المسافة البادئة التقريبي للفقرة الحالية (لإبراز أزرار الشريط). */
     fun currentIndent(v: TextFieldValue): Int {
-        val idx = paragraphIndexAt(v)
-        return v.annotatedString.toIndents().getOrElse(idx) { 0 }
+        val left = currentParaIndent(v).leftPt
+        return (left / INDENT_STEP_PT).roundToInt()
     }
 
     private inline fun forEachSelectedParagraph(text: String, s: Int, e: Int, action: (Int) -> Unit) {

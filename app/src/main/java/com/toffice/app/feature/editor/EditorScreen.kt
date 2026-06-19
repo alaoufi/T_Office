@@ -606,12 +606,18 @@ fun EditorScreen(
                             Row {
                                 Spacer(Modifier.width(rulerThick + gap))
                                 Box(Modifier.weight(1f).horizontalScroll(hScroll)) {
+                                    val curInd = RichTextOps.currentParaIndent(activeValue)
+                                    val contentWidthPt = (page.pageWidthPt - page.marginLeftPt - page.marginRightPt).coerceAtLeast(1f)
                                     HorizontalRuler(
                                         pageWidthPt = page.pageWidthPt,
                                         marginLeftPt = page.marginLeftPt,
                                         marginRightPt = page.marginRightPt,
                                         scale = scale,
                                         rtl = rulerRtl,
+                                        firstIndentPt = curInd.firstPt,
+                                        leftIndentPt = curInd.leftPt,
+                                        maxIndentPt = contentWidthPt,
+                                        onIndentChange = { f, l -> activeOnChange(RichTextOps.setParagraphIndent(activeValue, f, l)) },
                                         onChange = { l, r -> page = page.copy(marginLeftPt = l, marginRightPt = r) },
                                     )
                                 }
