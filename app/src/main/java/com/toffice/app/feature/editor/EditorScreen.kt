@@ -48,6 +48,9 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.ContentPaste
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.FormatAlignCenter
 import androidx.compose.material.icons.filled.FormatAlignJustify
@@ -364,6 +367,14 @@ fun EditorScreen(
                         onTogglePageNumber = { page = page.copy(showPageNumber = !page.showPageNumber) },
                         onToggleRuler = { showRuler = !showRuler },
                         onWordCount = { viewModel.notify("عدد الكلمات: ${arabicDigits(wordCount(value.text))}") },
+                        onCharCount = { viewModel.notify("عدد الأحرف: ${arabicDigits(value.text.length)}") },
+                        onDelete = {
+                            if (activeValue.selection.start != activeValue.selection.end) {
+                                activeOnChange(RichTextOps.replaceSelection(activeValue, ""))
+                            }
+                        },
+                        onInsertText = { activeOnChange(RichTextOps.replaceSelection(activeValue, it)) },
+                        onClose = { persist(); onBack() },
                     )
                     FormatToolbar(value = activeValue, onChange = activeOnChange)
                     if (showFindReplace) {
@@ -806,6 +817,10 @@ private fun EditorMenuBar(
     onTogglePageNumber: () -> Unit,
     onToggleRuler: () -> Unit,
     onWordCount: () -> Unit,
+    onCharCount: () -> Unit,
+    onDelete: () -> Unit,
+    onInsertText: (String) -> Unit,
+    onClose: () -> Unit,
 ) {
     Row(
         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).background(MaterialTheme.colorScheme.surface),
@@ -820,6 +835,8 @@ private fun EditorMenuBar(
             HorizontalDivider()
             MenuRow("إعداد الصفحة", Icons.Default.AspectRatio) { close(); onPageSetup() }
             MenuRow(if (page.showPageNumber) "إخفاء ترقيم الصفحات" else "إظهار ترقيم الصفحات", Icons.Default.Numbers) { close(); onTogglePageNumber() }
+            HorizontalDivider()
+            MenuRow("إغلاق", Icons.Default.Close) { close(); onClose() }
         }
         MenuBarMenu("تحرير", openMenu, onOpenMenu) { close ->
             MenuRow("تراجع", Icons.AutoMirrored.Filled.Undo, enabled = canUndo) { close(); onUndo() }
@@ -828,6 +845,7 @@ private fun EditorMenuBar(
             MenuRow("قص", Icons.Default.ContentCut) { close(); onCut() }
             MenuRow("نسخ", Icons.Default.ContentCopy) { close(); onCopy() }
             MenuRow("لصق", Icons.Default.ContentPaste) { close(); onPaste() }
+            MenuRow("حذف المحدّد", Icons.Default.Delete) { close(); onDelete() }
             HorizontalDivider()
             MenuRow("تحديد الكل", Icons.Default.SelectAll) { close(); onSelectAll() }
             MenuRow("بحث واستبدال", Icons.Default.Search) { close(); onFindReplace() }
@@ -842,9 +860,21 @@ private fun EditorMenuBar(
             MenuRow("توسيط", Icons.Default.FormatAlignCenter) { close(); onChange(RichTextOps.setAlign(value, TextAlign.Center)) }
             MenuRow("محاذاة يسار", Icons.AutoMirrored.Filled.FormatAlignLeft) { close(); onChange(RichTextOps.setAlign(value, TextAlign.Left)) }
             MenuRow("ضبط", Icons.Default.FormatAlignJustify) { close(); onChange(RichTextOps.setAlign(value, TextAlign.Justify)) }
+            HorizontalDivider()
+            MenuRow("لون أحمر", Icons.Default.FormatColorText) { close(); onChange(RichTextOps.setColor(value, 0xFFD32F2F.toInt())) }
+            MenuRow("لون أزرق", Icons.Default.FormatColorText) { close(); onChange(RichTextOps.setColor(value, 0xFF1565C0.toInt())) }
+            MenuRow("لون أسود", Icons.Default.FormatColorText) { close(); onChange(RichTextOps.setColor(value, 0xFF000000.toInt())) }
+            MenuRow("تظليل أصفر", Icons.Default.FormatColorFill) { close(); onChange(RichTextOps.setHighlight(value, 0xFFFFEB3B.toInt())) }
+            MenuRow("إزالة التظليل", Icons.Default.FormatColorReset) { close(); onChange(RichTextOps.setHighlight(value, 0)) }
+            HorizontalDivider()
+            MenuRow("قائمة نقطية", Icons.AutoMirrored.Filled.FormatListBulleted) { close(); onChange(RichTextOps.applyList(value, RichTextOps.ListSpec(numbered = false, glyph = "•"))) }
+            MenuRow("قائمة مرقّمة", Icons.Default.FormatListNumbered) { close(); onChange(RichTextOps.applyList(value, RichTextOps.ListSpec(numbered = true, sep = "."))) }
         }
         MenuBarMenu("إدراج", openMenu, onOpenMenu) { close ->
             MenuRow(if (page.showPageNumber) "إخفاء رقم الصفحة" else "رقم الصفحة", Icons.Default.Numbers) { close(); onTogglePageNumber() }
+            MenuRow("إدراج التاريخ", Icons.Default.DateRange) { close(); onInsertText(currentDateString()) }
+            MenuRow("إدراج الوقت", Icons.Default.Schedule) { close(); onInsertText(currentTimeString()) }
+            HorizontalDivider()
             MenuRow("جدول (قريباً)", Icons.Default.TableChart, enabled = false) { }
             MenuRow("صورة (قريباً)", Icons.Default.Image, enabled = false) { }
         }
@@ -860,10 +890,21 @@ private fun EditorMenuBar(
         }
         MenuBarMenu("عرض", openMenu, onOpenMenu) { close ->
             MenuRow(if (showRuler) "إخفاء المسطرة" else "إظهار المسطرة", Icons.Default.Straighten) { close(); onToggleRuler() }
+        }
+        MenuBarMenu("أدوات", openMenu, onOpenMenu) { close ->
             MenuRow("عدد الكلمات", Icons.AutoMirrored.Filled.Notes) { close(); onWordCount() }
+            MenuRow("عدد الأحرف", Icons.AutoMirrored.Filled.Notes) { close(); onCharCount() }
         }
     }
 }
+
+/** التاريخ الحالي بصيغة عربية. */
+fun currentDateString(): String =
+    java.text.SimpleDateFormat("yyyy/MM/dd", java.util.Locale("ar")).format(java.util.Date())
+
+/** الوقت الحالي. */
+fun currentTimeString(): String =
+    java.text.SimpleDateFormat("hh:mm a", java.util.Locale("ar")).format(java.util.Date())
 
 @Composable
 private fun MenuBarMenu(
