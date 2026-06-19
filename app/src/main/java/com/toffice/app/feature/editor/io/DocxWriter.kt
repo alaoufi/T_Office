@@ -18,6 +18,7 @@ object DocxWriter {
         page: PageSettings = PageSettings(),
         header: List<ParaOut> = emptyList(),
         footer: List<ParaOut> = emptyList(),
+        tables: List<com.toffice.app.feature.editor.model.TableData> = emptyList(),
     ) {
         val hasHeader = header.any { it.runs.isNotEmpty() }
         val hasFooter = footer.any { it.runs.isNotEmpty() } || page.showPageNumber
@@ -26,7 +27,7 @@ object DocxWriter {
             zip.entry("[Content_Types].xml", contentTypes(hasHeader, hasFooter))
             zip.entry("_rels/.rels", RELS)
             zip.entry("word/_rels/document.xml.rels", documentRels(hasHeader, hasFooter))
-            zip.entry("word/document.xml", buildDocument(paragraphs, page, hasHeader, hasFooter))
+            zip.entry("word/document.xml", buildDocument(paragraphs, page, hasHeader, hasFooter, tables))
             if (hasHeader) zip.entry("word/header1.xml", headerFooterPart("hdr", header, false))
             if (hasFooter) zip.entry("word/footer1.xml", headerFooterPart("ftr", footer, page.showPageNumber))
         }
@@ -71,14 +72,51 @@ object DocxWriter {
         page: PageSettings,
         hasHeader: Boolean,
         hasFooter: Boolean,
+        tables: List<com.toffice.app.feature.editor.model.TableData>,
     ): String {
         val sb = StringBuilder()
         sb.append("""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>""")
         sb.append("""<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>""")
         val paras = if (paragraphs.isEmpty()) listOf(ParaOut(0, 0, emptyList())) else paragraphs
         for (p in paras) sb.append(paragraph(p))
+        for (t in tables) sb.append(table(t, page.rtlPage))
         sb.append(sectPr(page, hasHeader, hasFooter))
         sb.append("""</w:body></w:document>""")
+        return sb.toString()
+    }
+
+    private fun table(t: com.toffice.app.feature.editor.model.TableData, rtl: Boolean): String {
+        if (t.rowCount == 0 || t.colCount == 0) return ""
+        val sb = StringBuilder()
+        sb.append("<w:tbl><w:tblPr>")
+        sb.append("<w:tblW w:w=\"0\" w:type=\"auto\"/>")
+        if (rtl) sb.append("<w:bidiVisual/>")
+        sb.append("<w:tblBorders>")
+        for (edge in listOf("top", "left", "bottom", "right", "insideH", "insideV")) {
+            sb.append("<w:").append(edge).append(" w:val=\"single\" w:sz=\"4\" w:space=\"0\" w:color=\"888888\"/>")
+        }
+        sb.append("</w:tblBorders></w:tblPr>")
+        sb.append("<w:tblGrid>")
+        repeat(t.colCount) { sb.append("<w:gridCol/>") }
+        sb.append("</w:tblGrid>")
+        for (row in t.rows) {
+            sb.append("<w:tr>")
+            for (cell in row) {
+                sb.append("<w:tc><w:tcPr/>")
+                val jc = if (rtl) "right" else "left"
+                sb.append("<w:p><w:pPr>")
+                if (rtl) sb.append("<w:bidi/>")
+                sb.append("<w:jc w:val=\"").append(jc).append("\"/></w:pPr>")
+                sb.append("<w:r><w:rPr>")
+                if (rtl) sb.append("<w:rtl/>")
+                sb.append("</w:rPr><w:t xml:space=\"preserve\">").append(escape(cell)).append("</w:t></w:r></w:p>")
+                sb.append("</w:tc>")
+            }
+            sb.append("</w:tr>")
+        }
+        sb.append("</w:tbl>")
+        // فقرة فارغة بعد الجدول (متطلب وورد)
+        sb.append("<w:p/>")
         return sb.toString()
     }
 

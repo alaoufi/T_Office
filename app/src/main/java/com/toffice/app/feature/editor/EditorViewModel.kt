@@ -70,6 +70,7 @@ class EditorViewModel @Inject constructor(
         page: PageSettings,
         header: AnnotatedString,
         footer: AnnotatedString,
+        tables: List<com.toffice.app.feature.editor.model.TableData> = emptyList(),
     ) {
         viewModelScope.launch {
             val existing = if (docId > 0) dao.getById(docId) else null
@@ -84,7 +85,7 @@ class EditorViewModel @Inject constructor(
             }
             val src = sourceUri
             if (src != null) {
-                val ok = writeDocxTo(Uri.parse(src), annotated, page, header, footer)
+                val ok = writeDocxTo(Uri.parse(src), annotated, page, header, footer, tables)
                 _events.emit(if (ok) "تم الحفظ في ملف Word الأصلي" else "تم الحفظ داخلياً (تعذّر الكتابة على الملف الأصلي)")
             } else {
                 _events.emit("تم الحفظ")
@@ -141,9 +142,9 @@ class EditorViewModel @Inject constructor(
         "مستند"
     }
 
-    fun exportDocx(uri: Uri, annotated: AnnotatedString, page: PageSettings, header: AnnotatedString, footer: AnnotatedString) {
+    fun exportDocx(uri: Uri, annotated: AnnotatedString, page: PageSettings, header: AnnotatedString, footer: AnnotatedString, tables: List<com.toffice.app.feature.editor.model.TableData> = emptyList()) {
         viewModelScope.launch {
-            val ok = writeDocxTo(uri, annotated, page, header, footer)
+            val ok = writeDocxTo(uri, annotated, page, header, footer, tables)
             _events.emit(if (ok) "تم تصدير ملف Word بنجاح" else "تعذّر التصدير")
         }
     }
@@ -184,12 +185,13 @@ class EditorViewModel @Inject constructor(
         page: PageSettings,
         header: AnnotatedString,
         footer: AnnotatedString,
+        tables: List<com.toffice.app.feature.editor.model.TableData> = emptyList(),
     ): Boolean = kotlinx.coroutines.withContext(Dispatchers.IO) {
         try {
             // "wt" يقتطع الملف قبل الكتابة لتفادي بقايا قديمة
             val mode = if (uri.scheme == "content") "wt" else "w"
             context.contentResolver.openOutputStream(uri, mode)?.use {
-                DocxWriter.write(it, annotated.toParagraphsOut(), page, header.toParagraphsOut(), footer.toParagraphsOut())
+                DocxWriter.write(it, annotated.toParagraphsOut(), page, header.toParagraphsOut(), footer.toParagraphsOut(), tables)
             } ?: return@withContext false
             true
         } catch (e: Exception) {

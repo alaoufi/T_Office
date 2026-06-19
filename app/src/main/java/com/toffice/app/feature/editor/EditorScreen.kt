@@ -32,6 +32,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.automirrored.filled.FormatAlignLeft
 import androidx.compose.material.icons.automirrored.filled.FormatAlignRight
 import androidx.compose.material.icons.automirrored.filled.FormatIndentDecrease
@@ -83,6 +84,7 @@ import androidx.compose.material.icons.filled.Superscript
 import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -147,6 +149,8 @@ import com.toffice.app.feature.editor.model.FONT_FAMILY_NAMES
 import com.toffice.app.feature.editor.model.PAGE_SIZES
 import com.toffice.app.feature.editor.model.PageSettings
 import com.toffice.app.feature.editor.model.RichTextOps
+import com.toffice.app.feature.editor.model.TableData
+import com.toffice.app.feature.editor.model.TableOps
 import com.toffice.app.feature.editor.model.currentPresetId
 import com.toffice.app.feature.editor.model.isLandscape
 import com.toffice.app.feature.editor.model.pageSizeById
@@ -175,6 +179,8 @@ fun EditorScreen(
     var page by remember { mutableStateOf(PageSettings()) }
     var header by remember { mutableStateOf(TextFieldValue()) }
     var footer by remember { mutableStateOf(TextFieldValue()) }
+    val tables = remember { mutableStateListOf<TableData>() }
+    var showInsertTable by remember { mutableStateOf(false) }
 
     // الحقل المركّز حالياً يحدّد أين يطبّق شريط التنسيق
     var focusTarget by remember { mutableStateOf(EditField.Body) }
@@ -218,6 +224,7 @@ fun EditorScreen(
             page = bundle.page
             header = TextFieldValue(bundle.header)
             footer = TextFieldValue(bundle.footer)
+            tables.clear(); tables.addAll(bundle.tables)
             initialized = true
         }
     }
@@ -243,6 +250,7 @@ fun EditorScreen(
             page = bundle.page
             header = TextFieldValue(bundle.header)
             footer = TextFieldValue(bundle.footer)
+            tables.clear(); tables.addAll(bundle.tables)
             undoStack.clear()
             redoStack.clear()
         }
@@ -250,7 +258,7 @@ fun EditorScreen(
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument(MIME_DOCX)
     ) { uri ->
-        if (uri != null) viewModel.exportDocx(uri, value.annotatedString, page, header.annotatedString, footer.annotatedString)
+        if (uri != null) viewModel.exportDocx(uri, value.annotatedString, page, header.annotatedString, footer.annotatedString, tables.toList())
     }
     val pdfLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/pdf")
@@ -265,8 +273,8 @@ fun EditorScreen(
 
     fun persist() {
         if (initialized) {
-            val json = DocSerializer.serialize(DocBundle(value.annotatedString, page, header.annotatedString, footer.annotatedString))
-            viewModel.save(title, json, value.annotatedString, page, header.annotatedString, footer.annotatedString)
+            val json = DocSerializer.serialize(DocBundle(value.annotatedString, page, header.annotatedString, footer.annotatedString, tables.toList()))
+            viewModel.save(title, json, value.annotatedString, page, header.annotatedString, footer.annotatedString, tables.toList())
         }
     }
 
@@ -373,6 +381,7 @@ fun EditorScreen(
                             }
                         },
                         onInsertText = { activeOnChange(RichTextOps.replaceSelection(activeValue, it)) },
+                        onInsertTable = { showInsertTable = true },
                         onClose = { persist(); onBack() },
                     )
                     FormatToolbar(value = activeValue, onChange = activeOnChange)
@@ -415,6 +424,13 @@ fun EditorScreen(
                             SaveFormat.TXT -> txtLauncher.launch("$base.txt")
                         }
                     },
+                )
+            }
+
+            if (showInsertTable) {
+                InsertTableDialog(
+                    onDismiss = { showInsertTable = false },
+                    onInsert = { r, c -> tables.add(TableOps.newTable(r, c)); showInsertTable = false },
                 )
             }
 
@@ -489,6 +505,13 @@ fun EditorScreen(
                                 onStartEditHF = { field -> hfEditing = field; focusTarget = field },
                                 onBodyFocus = { focusTarget = EditField.Body; hfEditing = null },
                                 onSheetHeight = { sheetHeightPx = it },
+                            )
+                        }
+                        if (tables.isNotEmpty()) {
+                            TablesEditor(
+                                tables = tables,
+                                onChange = { i, t -> tables[i] = t },
+                                onDelete = { i -> tables.removeAt(i) },
                             )
                         }
                         Spacer(Modifier.height(24.dp))
@@ -901,6 +924,7 @@ private fun EditorMenuBar(
     onCharCount: () -> Unit,
     onDelete: () -> Unit,
     onInsertText: (String) -> Unit,
+    onInsertTable: () -> Unit,
     onClose: () -> Unit,
 ) {
     Box(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)) {
@@ -964,7 +988,7 @@ private fun EditorMenuBar(
             MenuRow("إدراج التاريخ", Icons.Default.DateRange) { close(); onInsertText(currentDateString()) }
             MenuRow("إدراج الوقت", Icons.Default.Schedule) { close(); onInsertText(currentTimeString()) }
             HorizontalDivider()
-            MenuRow("جدول (قريباً)", Icons.Default.TableChart, enabled = false) { }
+            MenuRow("جدول", Icons.Default.TableChart) { close(); onInsertTable() }
             MenuRow("صورة (قريباً)", Icons.Default.Image, enabled = false) { }
         }
         MenuBarMenu("تخطيط", openMenu, onOpenMenu) { close ->
@@ -1030,6 +1054,75 @@ private fun MenuRow(
         enabled = enabled,
         onClick = onClick,
     )
+}
+
+/** مربّع اختيار عدد صفوف/أعمدة الجدول عند الإدراج (متغيّر). */
+@Composable
+private fun InsertTableDialog(onDismiss: () -> Unit, onInsert: (rows: Int, cols: Int) -> Unit) {
+    var rows by remember { mutableStateOf(2) }
+    var cols by remember { mutableStateOf(2) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("إدراج جدول") },
+        text = {
+            Column {
+                StepperRow("عدد الصفوف", rows, { rows = (rows - 1).coerceAtLeast(1) }, { rows = (rows + 1).coerceAtMost(50) })
+                Spacer(Modifier.height(8.dp))
+                StepperRow("عدد الأعمدة", cols, { cols = (cols - 1).coerceAtLeast(1) }, { cols = (cols + 1).coerceAtMost(20) })
+            }
+        },
+        confirmButton = { TextButton(onClick = { onInsert(rows, cols) }) { Text("إدراج") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } },
+    )
+}
+
+@Composable
+private fun StepperRow(label: String, value: Int, onMinus: () -> Unit, onPlus: () -> Unit) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, Modifier.weight(1f))
+        IconButton(onClick = onMinus) { Icon(Icons.Default.Close, "−") }
+        Text("$value", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 8.dp))
+        IconButton(onClick = onPlus) { Icon(Icons.Default.Add, "+") }
+    }
+}
+
+/** محرّر الجداول: خلايا قابلة للتحرير + إضافة/حذف صفوف وأعمدة + حذف الجدول. */
+@Composable
+private fun TablesEditor(
+    tables: List<TableData>,
+    onChange: (index: Int, table: TableData) -> Unit,
+    onDelete: (index: Int) -> Unit,
+) {
+    Column(Modifier.fillMaxWidth().padding(top = 12.dp)) {
+        tables.forEachIndexed { ti, table ->
+            Card(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                Column(Modifier.padding(8.dp)) {
+                    // شريط تحكم الجدول
+                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = { onChange(ti, TableOps.addRow(table)) }) { Text("+ صف") }
+                        TextButton(onClick = { onChange(ti, TableOps.addColumn(table)) }) { Text("+ عمود") }
+                        TextButton(onClick = { onChange(ti, TableOps.deleteRow(table, table.rowCount - 1)) }) { Text("− صف") }
+                        TextButton(onClick = { onChange(ti, TableOps.deleteColumn(table, table.colCount - 1)) }) { Text("− عمود") }
+                        TextButton(onClick = { onDelete(ti) }) { Text("حذف الجدول", color = MaterialTheme.colorScheme.error) }
+                    }
+                    // الخلايا
+                    table.rows.forEachIndexed { r, row ->
+                        Row(Modifier.fillMaxWidth()) {
+                            row.forEachIndexed { c, cell ->
+                                OutlinedTextField(
+                                    value = cell,
+                                    onValueChange = { onChange(ti, TableOps.setCell(table, r, c, it)) },
+                                    singleLine = false,
+                                    textStyle = TextStyle(fontSize = 14.sp),
+                                    modifier = Modifier.weight(1f).padding(2.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable

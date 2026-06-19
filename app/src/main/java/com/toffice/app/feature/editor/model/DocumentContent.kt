@@ -56,12 +56,13 @@ fun PageSettings.currentPresetId(): String {
     }?.id ?: "A4"
 }
 
-/** المستند الكامل: المتن المنسّق + إعدادات الصفحة + الترويسة + التذييل (كلها منسّقة). */
+/** المستند الكامل: المتن المنسّق + إعدادات الصفحة + الترويسة + التذييل + الجداول. */
 data class DocBundle(
     val body: AnnotatedString,
     val page: PageSettings = PageSettings(),
     val header: AnnotatedString = AnnotatedString(""),
     val footer: AnnotatedString = AnnotatedString(""),
+    val tables: List<TableData> = emptyList(),
 )
 
 /** تسلسل المستند الكامل إلى/من JSON (صيغة التطبيق الداخلية). */
@@ -83,6 +84,7 @@ object DocSerializer {
             .put("page", page)
             .put("header", JSONObject(annotatedToJson(bundle.header)))
             .put("footer", JSONObject(annotatedToJson(bundle.footer)))
+            .put("tables", TableOps.toJson(bundle.tables))
             .toString()
     }
 
@@ -117,6 +119,7 @@ object DocSerializer {
             page = page,
             header = parseRich(obj, "header"),
             footer = parseRich(obj, "footer"),
+            tables = TableOps.fromJson(obj.optJSONArray("tables")),
         )
     }
 }
