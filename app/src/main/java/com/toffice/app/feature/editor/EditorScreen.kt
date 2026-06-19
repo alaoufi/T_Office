@@ -144,7 +144,16 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.drop
 import com.toffice.app.feature.editor.model.DocBundle
 import com.toffice.app.feature.editor.model.DocSerializer
 import com.toffice.app.feature.editor.model.FONT_FAMILY_NAMES
@@ -166,7 +175,7 @@ private val SWATCHES = listOf(
     0xFF2E7D32.toInt(), 0xFFEF6C00.toInt(), 0xFF6A1B9A.toInt(),
 )
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, FlowPreview::class)
 @Composable
 fun EditorScreen(
     onBack: () -> Unit,
@@ -281,6 +290,28 @@ fun EditorScreen(
             val json = DocSerializer.serialize(DocBundle(value.annotatedString, page, header.annotatedString, footer.annotatedString, tables.toList(), afterBody.annotatedString))
             viewModel.save(title, json, value.annotatedString, page, header.annotatedString, footer.annotatedString, tables.toList(), afterBody.annotatedString)
         }
+    }
+
+    // حفظ تلقائي مُؤجَّل: يحفظ بصمت بعد توقّف الكتابة بثانية ونصف (منع فقد العمل)
+    LaunchedEffect(initialized) {
+        if (!initialized) return@LaunchedEffect
+        snapshotFlow {
+            listOf(
+                value.annotatedString, header.annotatedString, footer.annotatedString,
+                afterBody.annotatedString, page, title, tables.toList(),
+            )
+        }.drop(1).debounce(1500).collect { persist() }
+    }
+
+    // حفظ فوري عند مغادرة التطبيق/الشاشة (الخلفية) حتى لا يضيع أي تعديل
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val saveNow by rememberUpdatedState { persist() }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP || event == Lifecycle.Event.ON_PAUSE) saveNow()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     // القيمة والتغيير حسب الحقل المركّز (المتن/الترويسة/التذييل)
