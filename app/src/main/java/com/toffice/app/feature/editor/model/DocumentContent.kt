@@ -60,6 +60,12 @@ fun PageSettings.currentPresetId(): String {
 /** صورة مُدرَجة: مسار ملف محلي (نسخة داخلية أوفلاين) + أبعاد العرض بالنقاط. */
 data class DocImage(val path: String, val widthPt: Float = 240f, val heightPt: Float = 180f)
 
+/** كتلة في المستند الكتلي: نص أو جدول أو صورة، بالترتيب. */
+sealed interface DocBlock
+data class TextBlock(val content: AnnotatedString) : DocBlock
+data class TableBlock(val table: TableData) : DocBlock
+data class ImageBlock(val image: DocImage) : DocBlock
+
 data class DocBundle(
     val body: AnnotatedString,
     val page: PageSettings = PageSettings(),
@@ -68,7 +74,20 @@ data class DocBundle(
     val tables: List<TableData> = emptyList(),
     val afterBody: AnnotatedString = AnnotatedString(""),
     val images: List<DocImage> = emptyList(),
-)
+    val blocks: List<DocBlock> = emptyList(),
+) {
+    /** الكتل الفعلية: المخزّنة إن وُجدت، وإلا تُبنى من الصيغة القديمة (متن ← جداول ← نص ← صور). */
+    fun effectiveBlocks(): List<DocBlock> = if (blocks.isNotEmpty()) {
+        blocks
+    } else {
+        buildList {
+            add(TextBlock(body))
+            tables.forEach { add(TableBlock(it)) }
+            if (afterBody.text.isNotEmpty()) add(TextBlock(afterBody))
+            images.forEach { add(ImageBlock(it)) }
+        }
+    }
+}
 
 /** تسلسل المستند الكامل إلى/من JSON (صيغة التطبيق الداخلية). */
 object DocSerializer {
@@ -92,7 +111,49 @@ object DocSerializer {
             .put("tables", TableOps.toJson(bundle.tables))
             .put("after", JSONObject(annotatedToJson(bundle.afterBody)))
             .put("images", imagesToJson(bundle.images))
+            .put("blocks", blocksToJson(bundle.blocks))
             .toString()
+    }
+
+    private fun imageToJson(im: DocImage): JSONObject =
+        JSONObject().put("p", im.path).put("w", im.widthPt.toDouble()).put("h", im.heightPt.toDouble())
+
+    private fun blocksToJson(blocks: List<DocBlock>): org.json.JSONArray {
+        val arr = org.json.JSONArray()
+        for (b in blocks) {
+            val o = JSONObject()
+            when (b) {
+                is TextBlock -> o.put("type", "text").put("content", JSONObject(annotatedToJson(b.content)))
+                is TableBlock -> o.put("type", "table").put("table", TableOps.toJson(listOf(b.table)).getJSONObject(0))
+                is ImageBlock -> o.put("type", "image").put("image", imageToJson(b.image))
+            }
+            arr.put(o)
+        }
+        return arr
+    }
+
+    private fun blocksFromJson(arr: org.json.JSONArray?): List<DocBlock> {
+        if (arr == null) return emptyList()
+        val list = mutableListOf<DocBlock>()
+        for (i in 0 until arr.length()) {
+            val o = arr.optJSONObject(i) ?: continue
+            when (o.optString("type")) {
+                "text" -> {
+                    val c = o.optJSONObject("content")
+                    list.add(TextBlock(if (c != null) jsonToAnnotated(c.toString()) else AnnotatedString("")))
+                }
+                "table" -> {
+                    val tObj = o.optJSONObject("table")
+                    if (tObj != null) TableOps.fromJson(org.json.JSONArray().put(tObj)).firstOrNull()?.let { list.add(TableBlock(it)) }
+                }
+                "image" -> {
+                    val im = o.optJSONObject("image")
+                    val p = im?.optString("p", "") ?: ""
+                    if (p.isNotEmpty()) list.add(ImageBlock(DocImage(p, im.optDouble("w", 240.0).toFloat(), im.optDouble("h", 180.0).toFloat())))
+                }
+            }
+        }
+        return list
     }
 
     private fun imagesToJson(images: List<DocImage>): org.json.JSONArray {
@@ -155,6 +216,7 @@ object DocSerializer {
             tables = TableOps.fromJson(obj.optJSONArray("tables")),
             afterBody = parseRich(obj, "after"),
             images = imagesFromJson(obj.optJSONArray("images")),
+            blocks = blocksFromJson(obj.optJSONArray("blocks")),
         )
     }
 }

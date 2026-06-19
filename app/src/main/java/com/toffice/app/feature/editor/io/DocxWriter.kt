@@ -1,10 +1,15 @@
 package com.toffice.app.feature.editor.io
 
+import com.toffice.app.feature.editor.model.DocBlock
+import com.toffice.app.feature.editor.model.ImageBlock
 import com.toffice.app.feature.editor.model.INDENT_STEP_PT
 import com.toffice.app.feature.editor.model.PageSettings
 import com.toffice.app.feature.editor.model.ParaOut
 import com.toffice.app.feature.editor.model.RunOut
+import com.toffice.app.feature.editor.model.TableBlock
+import com.toffice.app.feature.editor.model.TextBlock
 import com.toffice.app.feature.editor.model.ptToTwips
+import com.toffice.app.feature.editor.model.toParagraphsOut
 import java.io.OutputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
@@ -32,6 +37,46 @@ object DocxWriter {
             if (hasHeader) zip.entry("word/header1.xml", headerFooterPart("hdr", header, false))
             if (hasFooter) zip.entry("word/footer1.xml", headerFooterPart("ftr", footer, page.showPageNumber))
         }
+    }
+
+    /** يكتب DOCX من كتل مرتّبة (نص/جدول/صورة) — المحرّك الكتلي. الصور تُتخطّى مؤقتاً. */
+    fun writeBlocks(
+        out: OutputStream,
+        blocks: List<DocBlock>,
+        page: PageSettings = PageSettings(),
+        header: List<ParaOut> = emptyList(),
+        footer: List<ParaOut> = emptyList(),
+    ) {
+        val hasHeader = header.any { it.runs.isNotEmpty() }
+        val hasFooter = footer.any { it.runs.isNotEmpty() } || page.showPageNumber
+
+        ZipOutputStream(out).use { zip ->
+            zip.entry("[Content_Types].xml", contentTypes(hasHeader, hasFooter))
+            zip.entry("_rels/.rels", RELS)
+            zip.entry("word/_rels/document.xml.rels", documentRels(hasHeader, hasFooter))
+            zip.entry("word/document.xml", buildBlocksDocument(blocks, page, hasHeader, hasFooter))
+            if (hasHeader) zip.entry("word/header1.xml", headerFooterPart("hdr", header, false))
+            if (hasFooter) zip.entry("word/footer1.xml", headerFooterPart("ftr", footer, page.showPageNumber))
+        }
+    }
+
+    private fun buildBlocksDocument(blocks: List<DocBlock>, page: PageSettings, hasHeader: Boolean, hasFooter: Boolean): String {
+        val sb = StringBuilder()
+        sb.append("""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>""")
+        sb.append("""<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>""")
+        if (blocks.isEmpty()) sb.append(paragraph(ParaOut(0, 0, emptyList())))
+        for (b in blocks) when (b) {
+            is TextBlock -> {
+                val paras = b.content.toParagraphsOut()
+                if (paras.isEmpty()) sb.append(paragraph(ParaOut(0, 0, emptyList())))
+                else for (p in paras) sb.append(paragraph(p))
+            }
+            is TableBlock -> sb.append(table(b.table, page.rtlPage))
+            is ImageBlock -> {} // تصدير الصور لاحقاً
+        }
+        sb.append(sectPr(page, hasHeader, hasFooter))
+        sb.append("""</w:body></w:document>""")
+        return sb.toString()
     }
 
     private fun ZipOutputStream.entry(name: String, content: String) {
