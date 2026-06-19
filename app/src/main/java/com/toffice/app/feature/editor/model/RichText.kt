@@ -6,6 +6,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.ParagraphStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -31,43 +32,70 @@ const val INDENT_STEP_PT = 36
 
 /** عائلات الخطوط المتاحة (0 = الافتراضي). */
 const val FONT_DEFAULT = 0
-const val FONT_SERIF = 1
-const val FONT_SANS = 2
-const val FONT_MONO = 3
-const val FONT_CURSIVE = 4
 
-val FONT_FAMILY_NAMES = mapOf(
-    FONT_DEFAULT to "افتراضي",
-    FONT_SERIF to "نسخ (Serif)",
-    FONT_SANS to "Sans",
-    FONT_MONO to "أحادي",
-    FONT_CURSIVE to "حر (Cursive)",
+/** تعريف خط: رمز ثابت + اسم للعرض + اسم للتصدير + مورد الخط (إن كان مُضمّناً). */
+data class FontDef(val code: Int, val displayName: String, val exportName: String, val resId: Int?)
+
+val FONT_DEFS: List<FontDef> = listOf(
+    FontDef(0, "افتراضي", "sans-serif", null),
+    FontDef(1, "Serif", "serif", null),
+    FontDef(2, "Sans", "sans-serif", null),
+    FontDef(3, "أحادي", "monospace", null),
+    FontDef(4, "حر (Cursive)", "cursive", null),
+    FontDef(5, "أميري (نسخ)", "Amiri", com.toffice.app.R.font.amiri),
+    FontDef(6, "شهرزاد (نسخ)", "Scheherazade New", com.toffice.app.R.font.scheherazade),
+    FontDef(7, "لطيف (نسخ)", "Lateef", com.toffice.app.R.font.lateef),
+    FontDef(8, "نوتو نسخ", "Noto Naskh Arabic", com.toffice.app.R.font.noto_naskh),
+    FontDef(9, "القاهرة", "Cairo", com.toffice.app.R.font.cairo),
+    FontDef(10, "تجوال", "Tajawal", com.toffice.app.R.font.tajawal),
+    FontDef(11, "المراعي", "Almarai", com.toffice.app.R.font.almarai),
+    FontDef(12, "المسيري", "El Messiri", com.toffice.app.R.font.el_messiri),
+    FontDef(13, "مركزي", "Markazi Text", com.toffice.app.R.font.markazi),
+    FontDef(14, "تشانغا", "Changa", com.toffice.app.R.font.changa),
+    FontDef(15, "ريم كوفي", "Reem Kufi", com.toffice.app.R.font.reem_kufi),
+    FontDef(16, "عارف رقعة", "Aref Ruqaa", com.toffice.app.R.font.aref_ruqaa),
+    FontDef(17, "مدى", "Mada", com.toffice.app.R.font.mada),
+    FontDef(18, "هرمتان", "Harmattan", com.toffice.app.R.font.harmattan),
+    FontDef(19, "لاله‌زار", "Lalezar", com.toffice.app.R.font.lalezar),
+    FontDef(20, "ركّاس", "Rakkas", com.toffice.app.R.font.rakkas),
+    FontDef(21, "ميرزا", "Mirza", com.toffice.app.R.font.mirza),
+    FontDef(22, "جمهورية", "Jomhuria", com.toffice.app.R.font.jomhuria),
 )
 
-fun fontFamilyOf(code: Int): FontFamily? = when (code) {
-    FONT_SERIF -> FontFamily.Serif
-    FONT_SANS -> FontFamily.SansSerif
-    FONT_MONO -> FontFamily.Monospace
-    FONT_CURSIVE -> FontFamily.Cursive
-    else -> null
+/** خريطة الرمز → اسم العرض (لشريط الأدوات). */
+val FONT_FAMILY_NAMES: Map<Int, String> = FONT_DEFS.associate { it.code to it.displayName }
+
+private val familyCache = HashMap<Int, FontFamily?>()
+
+fun fontFamilyOf(code: Int): FontFamily? = familyCache.getOrPut(code) {
+    val def = FONT_DEFS.firstOrNull { it.code == code }
+    when {
+        def == null -> null
+        def.resId != null -> FontFamily(Font(def.resId))
+        code == 1 -> FontFamily.Serif
+        code == 2 -> FontFamily.SansSerif
+        code == 3 -> FontFamily.Monospace
+        code == 4 -> FontFamily.Cursive
+        else -> null
+    }
 }
 
-fun codeOfFontFamily(ff: FontFamily?): Int = when (ff) {
-    FontFamily.Serif -> FONT_SERIF
-    FontFamily.SansSerif -> FONT_SANS
-    FontFamily.Monospace -> FONT_MONO
-    FontFamily.Cursive -> FONT_CURSIVE
-    else -> FONT_DEFAULT
+fun codeOfFontFamily(ff: FontFamily?): Int {
+    if (ff == null) return FONT_DEFAULT
+    when (ff) {
+        FontFamily.Serif -> return 1
+        FontFamily.SansSerif -> return 2
+        FontFamily.Monospace -> return 3
+        FontFamily.Cursive -> return 4
+        else -> {}
+    }
+    FONT_DEFS.forEach { d -> if (d.resId != null && fontFamilyOf(d.code) == ff) return d.code }
+    return FONT_DEFAULT
 }
 
-/** اسم الخط المقابل في DOCX/Android لكل عائلة. */
-fun fontNameOf(code: Int): String = when (code) {
-    FONT_SERIF -> "serif"
-    FONT_SANS -> "sans-serif"
-    FONT_MONO -> "monospace"
-    FONT_CURSIVE -> "cursive"
-    else -> "sans-serif"
-}
+/** اسم الخط المقابل في DOCX/PDF لكل عائلة. */
+fun fontNameOf(code: Int): String =
+    FONT_DEFS.firstOrNull { it.code == code }?.exportName ?: "sans-serif"
 
 /** خصائص تنسيق حرف واحد. */
 data class CharAttrs(

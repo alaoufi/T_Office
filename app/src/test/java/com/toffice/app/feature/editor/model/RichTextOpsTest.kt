@@ -279,6 +279,21 @@ class RichTextOpsTest {
     }
 
     @Test
+    fun fontFamily_roundTrip() {
+        val v = TextFieldValue(AnnotatedString("نص"), selection = TextRange(0, 2))
+        val amiri = RichTextOps.setFontFamily(v, 5)
+        assertEquals(5, amiri.annotatedString.toCharAttrs()[0].fontFamily)
+        val sans = RichTextOps.setFontFamily(v, 2)
+        assertEquals(2, sans.annotatedString.toCharAttrs()[0].fontFamily)
+    }
+
+    @Test
+    fun fontName_exportName() {
+        assertEquals("Amiri", fontNameOf(5))
+        assertEquals("sans-serif", fontNameOf(0))
+    }
+
+    @Test
     fun replaceSelection_pasteAtCursor() {
         val v = TextFieldValue(AnnotatedString("اب"), selection = TextRange(2, 2))
         val r = RichTextOps.replaceSelection(v, " جديد")
