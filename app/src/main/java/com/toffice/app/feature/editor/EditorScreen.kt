@@ -180,6 +180,7 @@ fun EditorScreen(
     var header by remember { mutableStateOf(TextFieldValue()) }
     var footer by remember { mutableStateOf(TextFieldValue()) }
     val tables = remember { mutableStateListOf<TableData>() }
+    var afterBody by remember { mutableStateOf(TextFieldValue()) }
     var showInsertTable by remember { mutableStateOf(false) }
 
     // الحقل المركّز حالياً يحدّد أين يطبّق شريط التنسيق
@@ -225,6 +226,7 @@ fun EditorScreen(
             header = TextFieldValue(bundle.header)
             footer = TextFieldValue(bundle.footer)
             tables.clear(); tables.addAll(bundle.tables)
+            afterBody = TextFieldValue(bundle.afterBody)
             initialized = true
         }
     }
@@ -251,6 +253,7 @@ fun EditorScreen(
             header = TextFieldValue(bundle.header)
             footer = TextFieldValue(bundle.footer)
             tables.clear(); tables.addAll(bundle.tables)
+            afterBody = TextFieldValue(bundle.afterBody)
             undoStack.clear()
             redoStack.clear()
         }
@@ -258,7 +261,7 @@ fun EditorScreen(
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument(MIME_DOCX)
     ) { uri ->
-        if (uri != null) viewModel.exportDocx(uri, value.annotatedString, page, header.annotatedString, footer.annotatedString, tables.toList())
+        if (uri != null) viewModel.exportDocx(uri, value.annotatedString, page, header.annotatedString, footer.annotatedString, tables.toList(), afterBody.annotatedString)
     }
     val pdfLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/pdf")
@@ -273,8 +276,8 @@ fun EditorScreen(
 
     fun persist() {
         if (initialized) {
-            val json = DocSerializer.serialize(DocBundle(value.annotatedString, page, header.annotatedString, footer.annotatedString, tables.toList()))
-            viewModel.save(title, json, value.annotatedString, page, header.annotatedString, footer.annotatedString, tables.toList())
+            val json = DocSerializer.serialize(DocBundle(value.annotatedString, page, header.annotatedString, footer.annotatedString, tables.toList(), afterBody.annotatedString))
+            viewModel.save(title, json, value.annotatedString, page, header.annotatedString, footer.annotatedString, tables.toList(), afterBody.annotatedString)
         }
     }
 
@@ -283,11 +286,13 @@ fun EditorScreen(
         EditField.Body -> value
         EditField.Header -> header
         EditField.Footer -> footer
+        EditField.AfterBody -> afterBody
     }
     val activeOnChange: (TextFieldValue) -> Unit = when (focusTarget) {
         EditField.Body -> { v -> update(v) }
         EditField.Header -> { v -> header = v }
         EditField.Footer -> { v -> footer = v }
+        EditField.AfterBody -> { v -> afterBody = v }
     }
 
     // أوامر التحرير (قص/نسخ/لصق/تحديد) على الحقل المركّز
@@ -512,6 +517,25 @@ fun EditorScreen(
                                 tables = tables,
                                 onChange = { i, t -> tables[i] = t },
                                 onDelete = { i -> tables.removeAt(i) },
+                            )
+                            // نص أسفل الجدول (فوقه = المتن، فالجدول، فهذا)
+                            BasicTextField(
+                                value = afterBody,
+                                onValueChange = { afterBody = it },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 80.dp)
+                                    .background(Color.White)
+                                    .padding(8.dp)
+                                    .onFocusChanged { if (it.isFocused) { focusTarget = EditField.AfterBody; hfEditing = null } },
+                                textStyle = TextStyle(fontSize = 16.sp, color = Color(0xFF1A1A1A)),
+                                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                                decorationBox = { inner ->
+                                    if (afterBody.text.isEmpty()) {
+                                        Text("نص أسفل الجدول…", color = Color(0xFFBBBBBB), textAlign = TextAlign.Right, modifier = Modifier.fillMaxWidth())
+                                    }
+                                    inner()
+                                },
                             )
                         }
                         Spacer(Modifier.height(24.dp))
@@ -763,8 +787,8 @@ fun arabicDigits(n: Int): String {
     return n.toString().map { if (it in '0'..'9') ar[it - '0'] else it }.joinToString("")
 }
 
-/** الحقل القابل للتنسيق: المتن أو الترويسة أو التذييل. */
-enum class EditField { Body, Header, Footer }
+/** الحقل القابل للتنسيق: المتن أو الترويسة أو التذييل أو نص ما بعد الجدول. */
+enum class EditField { Body, Header, Footer, AfterBody }
 
 /**
  * حقل ترويسة/تذييل: مقفل وخافت افتراضياً، ولا يُحرَّر إلا بنقر مزدوج (مثل Word/WPS).

@@ -19,6 +19,7 @@ object DocxWriter {
         header: List<ParaOut> = emptyList(),
         footer: List<ParaOut> = emptyList(),
         tables: List<com.toffice.app.feature.editor.model.TableData> = emptyList(),
+        afterParagraphs: List<ParaOut> = emptyList(),
     ) {
         val hasHeader = header.any { it.runs.isNotEmpty() }
         val hasFooter = footer.any { it.runs.isNotEmpty() } || page.showPageNumber
@@ -27,7 +28,7 @@ object DocxWriter {
             zip.entry("[Content_Types].xml", contentTypes(hasHeader, hasFooter))
             zip.entry("_rels/.rels", RELS)
             zip.entry("word/_rels/document.xml.rels", documentRels(hasHeader, hasFooter))
-            zip.entry("word/document.xml", buildDocument(paragraphs, page, hasHeader, hasFooter, tables))
+            zip.entry("word/document.xml", buildDocument(paragraphs, page, hasHeader, hasFooter, tables, afterParagraphs))
             if (hasHeader) zip.entry("word/header1.xml", headerFooterPart("hdr", header, false))
             if (hasFooter) zip.entry("word/footer1.xml", headerFooterPart("ftr", footer, page.showPageNumber))
         }
@@ -73,6 +74,7 @@ object DocxWriter {
         hasHeader: Boolean,
         hasFooter: Boolean,
         tables: List<com.toffice.app.feature.editor.model.TableData>,
+        afterParagraphs: List<ParaOut>,
     ): String {
         val sb = StringBuilder()
         sb.append("""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>""")
@@ -80,6 +82,7 @@ object DocxWriter {
         val paras = if (paragraphs.isEmpty()) listOf(ParaOut(0, 0, emptyList())) else paragraphs
         for (p in paras) sb.append(paragraph(p))
         for (t in tables) sb.append(table(t, page.rtlPage))
+        for (p in afterParagraphs) sb.append(paragraph(p))
         sb.append(sectPr(page, hasHeader, hasFooter))
         sb.append("""</w:body></w:document>""")
         return sb.toString()

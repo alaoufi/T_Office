@@ -63,6 +63,7 @@ data class DocBundle(
     val header: AnnotatedString = AnnotatedString(""),
     val footer: AnnotatedString = AnnotatedString(""),
     val tables: List<TableData> = emptyList(),
+    val afterBody: AnnotatedString = AnnotatedString(""),
 )
 
 /** تسلسل المستند الكامل إلى/من JSON (صيغة التطبيق الداخلية). */
@@ -85,6 +86,7 @@ object DocSerializer {
             .put("header", JSONObject(annotatedToJson(bundle.header)))
             .put("footer", JSONObject(annotatedToJson(bundle.footer)))
             .put("tables", TableOps.toJson(bundle.tables))
+            .put("after", JSONObject(annotatedToJson(bundle.afterBody)))
             .toString()
     }
 
@@ -120,6 +122,7 @@ object DocSerializer {
             header = parseRich(obj, "header"),
             footer = parseRich(obj, "footer"),
             tables = TableOps.fromJson(obj.optJSONArray("tables")),
+            afterBody = parseRich(obj, "after"),
         )
     }
 }
