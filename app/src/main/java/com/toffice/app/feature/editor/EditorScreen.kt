@@ -5,6 +5,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -1347,11 +1348,16 @@ private fun FormatToolbar(value: TextFieldValue, onChange: (TextFieldValue) -> U
     var listDialog by remember { mutableStateOf(false) }
     var moreMenu by remember { mutableStateOf(false) }
 
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        tonalElevation = 2.dp,
+        shadowElevation = 1.dp,
+    ) {
     Row(
         Modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 4.dp, vertical = 2.dp),
+            .padding(horizontal = 6.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ToolToggle(Icons.Default.FormatBold, "غامق", cur.bold) { onChange(RichTextOps.toggleBold(value)) }
@@ -1362,7 +1368,11 @@ private fun FormatToolbar(value: TextFieldValue, onChange: (TextFieldValue) -> U
         // عائلة الخط (قائمة)
         Box {
             Row(
-                Modifier.clickable { fontMenu = true }.padding(horizontal = 6.dp, vertical = 10.dp),
+                Modifier
+                    .toolChip()
+                    .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                    .clickable { fontMenu = true }
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(Icons.Default.FontDownload, "الخط", tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1382,7 +1392,11 @@ private fun FormatToolbar(value: TextFieldValue, onChange: (TextFieldValue) -> U
         // حجم الخط (قائمة)
         Box {
             Row(
-                Modifier.clickable { sizeMenu = true }.padding(horizontal = 6.dp, vertical = 10.dp),
+                Modifier
+                    .toolChip()
+                    .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                    .clickable { sizeMenu = true }
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(Icons.Default.FormatSize, "حجم الخط", tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1479,6 +1493,7 @@ private fun FormatToolbar(value: TextFieldValue, onChange: (TextFieldValue) -> U
                 MenuChoice("إزالة التظليل", Icons.Default.FormatColorReset, false) { onChange(RichTextOps.setHighlight(value, 0)); moreMenu = false }
             }
         }
+    }
     }
 
     if (listDialog) {
@@ -1592,9 +1607,23 @@ private fun MenuChoice(
 
 @Composable
 private fun ToolToggle(icon: androidx.compose.ui.graphics.vector.ImageVector, desc: String, active: Boolean, onClick: () -> Unit) {
-    val tint = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-    IconButton(onClick = onClick) { Icon(icon, contentDescription = desc, tint = tint) }
+    // الحالة المفعّلة تظهر كزرّ ممتلئ (Material 3) لوضوح أعلى
+    val tint = if (active) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+    val bg = if (active) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent
+    Box(
+        Modifier
+            .padding(horizontal = 1.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(bg),
+    ) {
+        IconButton(onClick = onClick) { Icon(icon, contentDescription = desc, tint = tint) }
+    }
 }
+
+/** خلفية «شريحة» خفيفة لمشغّلات القوائم (الخط/الحجم) لتبدو كعناصر تحكّم. */
+private fun Modifier.toolChip(): Modifier = this
+    .padding(horizontal = 2.dp)
+    .clip(RoundedCornerShape(10.dp))
 
 @Composable
 private fun ToolDivider() {
