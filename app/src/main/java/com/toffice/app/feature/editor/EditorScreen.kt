@@ -824,11 +824,12 @@ private fun EditorMenuBar(
     onInsertText: (String) -> Unit,
     onClose: () -> Unit,
 ) {
-    Row(
-        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).background(MaterialTheme.colorScheme.surface),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        MenuBarMenu("ملف", openMenu, onOpenMenu) { close ->
+    Box(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)) {
+        Row(
+            Modifier.horizontalScroll(rememberScrollState()),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            MenuBarMenu("ملف", openMenu, onOpenMenu) { close ->
             MenuRow("فتح", Icons.Default.FolderOpen) { close(); onOpen() }
             MenuRow("حفظ", Icons.Default.Save) { close(); onSave() }
             MenuRow("حفظ باسم…", Icons.Default.SaveAs) { close(); onSaveAs() }
@@ -898,6 +899,7 @@ private fun EditorMenuBar(
         MenuBarMenu("أدوات", openMenu, onOpenMenu) { close ->
             MenuRow("عدد الكلمات", Icons.AutoMirrored.Filled.Notes) { close(); onWordCount() }
             MenuRow("عدد الأحرف", Icons.AutoMirrored.Filled.Notes) { close(); onCharCount() }
+        }
         }
     }
 }
