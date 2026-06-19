@@ -325,15 +325,6 @@ fun EditorScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "رجوع")
                     }
                 },
-                actions = {
-                    IconButton(onClick = { undo() }, enabled = undoStack.isNotEmpty()) {
-                        Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = "تراجع")
-                    }
-                    IconButton(onClick = { redo() }, enabled = redoStack.isNotEmpty()) {
-                        Icon(Icons.AutoMirrored.Filled.Redo, contentDescription = "إعادة")
-                    }
-                    IconButton(onClick = { persist() }) { Icon(Icons.Default.Save, contentDescription = "حفظ") }
-                },
             )
         },
     ) { padding ->
@@ -434,16 +425,12 @@ fun EditorScreen(
                     val sheetWidthDp = maxWidth - rulerThick - gap
                     val scale = sheetWidthDp.value / page.pageWidthPt
                     val pageHeightDp = page.pageHeightPt * scale
-                    // ارتفاع المحتوى الفعلي وعدد الصفحات
-                    val sheetHeightDp = if (sheetHeightPx > 0) sheetHeightPx / density else pageHeightDp
+                    // ارتفاع المحتوى الفعلي (لا يقل عن صفحة) وعدد الصفحات — يمنع اختفاء المسطرة الرأسية
+                    val sheetHeightDp = maxOf(pageHeightDp, if (sheetHeightPx > 0) sheetHeightPx / density else pageHeightDp)
                     val pageCount = paginationPageCount(sheetHeightDp, pageHeightDp)
 
-                    // اتجاه المسطرة يتبع اتجاه الفقرة الحالية للمتن (تلقائي ← اتجاه الصفحة)
-                    val rulerRtl = when (RichTextOps.currentDirection(value)) {
-                        TextDirection.Rtl -> true
-                        TextDirection.Ltr -> false
-                        else -> page.rtlPage
-                    }
+                    // اتجاه المسطرة يتبع اتجاه الصفحة (ثابت لا يتأثر بالتنسيق)
+                    val rulerRtl = page.rtlPage
                     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
                         if (showRuler) {
                             Row {
@@ -829,6 +816,11 @@ private fun EditorMenuBar(
             Modifier.horizontalScroll(rememberScrollState()),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            // وصول سريع: تراجع/إعادة/حفظ (ضمن شريط القوائم لتوفير المساحة)
+            IconButton(onClick = onUndo, enabled = canUndo) { Icon(Icons.AutoMirrored.Filled.Undo, "تراجع") }
+            IconButton(onClick = onRedo, enabled = canRedo) { Icon(Icons.AutoMirrored.Filled.Redo, "إعادة") }
+            IconButton(onClick = onSave) { Icon(Icons.Default.Save, "حفظ") }
+            Box(Modifier.width(1.dp).height(24.dp).background(MaterialTheme.colorScheme.outlineVariant))
             MenuBarMenu("ملف", openMenu, onOpenMenu) { close ->
             MenuRow("فتح", Icons.Default.FolderOpen) { close(); onOpen() }
             MenuRow("حفظ", Icons.Default.Save) { close(); onSave() }
