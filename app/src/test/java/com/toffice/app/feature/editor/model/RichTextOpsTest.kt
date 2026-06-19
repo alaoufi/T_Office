@@ -270,4 +270,19 @@ class RichTextOpsTest {
         val r = RichTextOps.setSize(v, 24)
         assertEquals("حجم", r.annotatedString.text)
     }
+
+    @Test
+    fun replaceSelection_cut() {
+        val v = TextFieldValue(AnnotatedString("نص محذوف هنا"), selection = TextRange(3, 9))
+        val r = RichTextOps.replaceSelection(v, "")
+        assertEquals("نص هنا", r.annotatedString.text)
+    }
+
+    @Test
+    fun replaceSelection_pasteAtCursor() {
+        val v = TextFieldValue(AnnotatedString("اب"), selection = TextRange(2, 2))
+        val r = RichTextOps.replaceSelection(v, " جديد")
+        assertEquals("اب جديد", r.annotatedString.text)
+        assertEquals(7, r.selection.start)
+    }
 }

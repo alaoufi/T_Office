@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.absolutePadding
@@ -44,6 +45,10 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.ContentCut
+import androidx.compose.material.icons.filled.ContentPaste
+import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.FormatAlignCenter
 import androidx.compose.material.icons.filled.FormatAlignJustify
 import androidx.compose.material.icons.filled.FormatBold
@@ -114,8 +119,11 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
@@ -211,7 +219,7 @@ fun EditorScreen(
     var showMenu by remember { mutableStateOf(false) }
     var showPageSetup by remember { mutableStateOf(false) }
     var showSaveAs by remember { mutableStateOf(false) }
-    var ribbonTab by remember { mutableStateOf(RibbonTab.Home) }
+    var openMenu by remember { mutableStateOf<String?>(null) }
     var showRuler by remember { mutableStateOf(true) }
     var showFindReplace by remember { mutableStateOf(false) }
     var findQuery by remember { mutableStateOf("") }
@@ -265,6 +273,28 @@ fun EditorScreen(
         EditField.Footer -> { v -> footer = v }
     }
 
+    // أوامر التحرير (قص/نسخ/لصق/تحديد) على الحقل المركّز
+    val clipboard = LocalClipboardManager.current
+    fun doCopy() {
+        val v = activeValue
+        val s = minOf(v.selection.start, v.selection.end)
+        val e = maxOf(v.selection.start, v.selection.end)
+        if (e > s) clipboard.setText(AnnotatedString(v.text.substring(s, e)))
+    }
+    fun doCut() {
+        doCopy()
+        if (activeValue.selection.start != activeValue.selection.end) {
+            activeOnChange(RichTextOps.replaceSelection(activeValue, ""))
+        }
+    }
+    fun doPaste() {
+        val t = clipboard.getText()?.text
+        if (!t.isNullOrEmpty()) activeOnChange(RichTextOps.replaceSelection(activeValue, t))
+    }
+    fun doSelectAll() {
+        activeOnChange(activeValue.copy(selection = TextRange(0, activeValue.text.length)))
+    }
+
     BackHandler { persist(); onBack() }
 
     Scaffold(
@@ -307,40 +337,51 @@ fun EditorScreen(
                 .fillMaxSize()
                 .padding(top = padding.calculateTopPadding(), bottom = padding.calculateBottomPadding()),
         ) {
-            // شريط التبويبات (Ribbon) — يتبع اتجاه الصفحة
+            // شريط القوائم الكلاسيكي + شريط تنسيق سريع — يتبع اتجاه الصفحة
             CompositionLocalProviderDir(page.rtlPage) {
-                EditorRibbon(
-                    tab = ribbonTab,
-                    onTab = { ribbonTab = it },
-                    value = activeValue,
-                    onChange = activeOnChange,
-                    page = page,
-                    wordCount = wordCount(value.text),
-                    showRuler = showRuler,
-                    onToggleRuler = { showRuler = !showRuler },
-                    onTogglePageNumber = { page = page.copy(showPageNumber = !page.showPageNumber) },
-                    onFindReplace = { showFindReplace = true; focusTarget = EditField.Body },
-                    onOpen = { openLauncher.launch(arrayOf(MIME_DOCX, "application/msword", "*/*")) },
-                    onSave = { persist() },
-                    onSaveAs = { showSaveAs = true },
-                    onExportPdf = { pdfLauncher.launch("${title.ifBlank { "مستند" }}.pdf") },
-                    onPageSetup = { showPageSetup = true },
-                )
-                if (showFindReplace) {
-                    FindReplaceBar(
-                        find = findQuery,
-                        onFind = { findQuery = it },
-                        replace = replaceQuery,
-                        onReplace = { replaceQuery = it },
-                        onNext = { value = RichTextOps.findNext(value, findQuery) },
-                        onReplaceOne = { value = RichTextOps.replaceCurrent(value, findQuery, replaceQuery) },
-                        onReplaceAll = {
-                            val (nv, count) = RichTextOps.replaceAll(value, findQuery, replaceQuery)
-                            update(nv)
-                            viewModel.notify("تم استبدال $count")
-                        },
-                        onClose = { showFindReplace = false },
+                Column {
+                    EditorMenuBar(
+                        openMenu = openMenu,
+                        onOpenMenu = { openMenu = it },
+                        page = page,
+                        showRuler = showRuler,
+                        canUndo = undoStack.isNotEmpty(),
+                        canRedo = redoStack.isNotEmpty(),
+                        value = activeValue,
+                        onChange = activeOnChange,
+                        onUndo = { undo() },
+                        onRedo = { redo() },
+                        onCut = { doCut() },
+                        onCopy = { doCopy() },
+                        onPaste = { doPaste() },
+                        onSelectAll = { doSelectAll() },
+                        onFindReplace = { showFindReplace = true; focusTarget = EditField.Body },
+                        onOpen = { openLauncher.launch(arrayOf(MIME_DOCX, "application/msword", "*/*")) },
+                        onSave = { persist() },
+                        onSaveAs = { showSaveAs = true },
+                        onExportPdf = { pdfLauncher.launch("${title.ifBlank { "مستند" }}.pdf") },
+                        onPageSetup = { showPageSetup = true },
+                        onTogglePageNumber = { page = page.copy(showPageNumber = !page.showPageNumber) },
+                        onToggleRuler = { showRuler = !showRuler },
+                        onWordCount = { viewModel.notify("عدد الكلمات: ${arabicDigits(wordCount(value.text))}") },
                     )
+                    FormatToolbar(value = activeValue, onChange = activeOnChange)
+                    if (showFindReplace) {
+                        FindReplaceBar(
+                            find = findQuery,
+                            onFind = { findQuery = it },
+                            replace = replaceQuery,
+                            onReplace = { replaceQuery = it },
+                            onNext = { value = RichTextOps.findNext(value, findQuery) },
+                            onReplaceOne = { value = RichTextOps.replaceCurrent(value, findQuery, replaceQuery) },
+                            onReplaceAll = {
+                                val (nv, count) = RichTextOps.replaceAll(value, findQuery, replaceQuery)
+                                update(nv)
+                                viewModel.notify("تم استبدال ${arabicDigits(count)}")
+                            },
+                            onClose = { showFindReplace = false },
+                        )
+                    }
                 }
             }
 
@@ -735,141 +776,128 @@ private fun FindReplaceBar(
     }
 }
 
-/** تبويبات الشريط (Ribbon) بنمط Word/WPS. */
-enum class RibbonTab { File, Home, Insert, Layout, View, Review }
-
 /** عدد الكلمات في النص. */
 fun wordCount(text: String): Int =
     text.split(Regex("\\s+")).count { it.isNotBlank() }
 
+/** شريط القوائم الكلاسيكي (ملف/تحرير/تنسيق/…) كلٌّ يفتح قائمة أوامر منسدلة. */
 @Composable
-private fun EditorRibbon(
-    tab: RibbonTab,
-    onTab: (RibbonTab) -> Unit,
+private fun EditorMenuBar(
+    openMenu: String?,
+    onOpenMenu: (String?) -> Unit,
+    page: PageSettings,
+    showRuler: Boolean,
+    canUndo: Boolean,
+    canRedo: Boolean,
     value: TextFieldValue,
     onChange: (TextFieldValue) -> Unit,
-    page: PageSettings,
-    wordCount: Int,
-    showRuler: Boolean,
-    onToggleRuler: () -> Unit,
-    onTogglePageNumber: () -> Unit,
+    onUndo: () -> Unit,
+    onRedo: () -> Unit,
+    onCut: () -> Unit,
+    onCopy: () -> Unit,
+    onPaste: () -> Unit,
+    onSelectAll: () -> Unit,
     onFindReplace: () -> Unit,
     onOpen: () -> Unit,
     onSave: () -> Unit,
     onSaveAs: () -> Unit,
     onExportPdf: () -> Unit,
     onPageSetup: () -> Unit,
+    onTogglePageNumber: () -> Unit,
+    onToggleRuler: () -> Unit,
+    onWordCount: () -> Unit,
 ) {
-    Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)) {
-        // صف التبويبات
-        Row(
-            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            RibbonTabButton("ملف", tab == RibbonTab.File) { onTab(RibbonTab.File) }
-            RibbonTabButton("الصفحة الرئيسية", tab == RibbonTab.Home) { onTab(RibbonTab.Home) }
-            RibbonTabButton("إدراج", tab == RibbonTab.Insert) { onTab(RibbonTab.Insert) }
-            RibbonTabButton("تخطيط", tab == RibbonTab.Layout) { onTab(RibbonTab.Layout) }
-            RibbonTabButton("عرض", tab == RibbonTab.View) { onTab(RibbonTab.View) }
-            RibbonTabButton("مراجعة", tab == RibbonTab.Review) { onTab(RibbonTab.Review) }
-        }
-        HorizontalDivider()
-        // أدوات التبويب المختار
-        when (tab) {
-            RibbonTab.Home -> FormatToolbar(value, onChange)
-            RibbonTab.File -> Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 4.dp),
-            ) {
-                RibbonButton(Icons.Default.FolderOpen, "فتح", onClick = onOpen)
-                RibbonButton(Icons.Default.Save, "حفظ", onClick = onSave)
-                RibbonButton(Icons.Default.SaveAs, "حفظ باسم", onClick = onSaveAs)
-                RibbonButton(Icons.Default.PictureAsPdf, "PDF", onClick = onExportPdf)
-                ToolDivider()
-                RibbonButton(Icons.Default.AspectRatio, "إعداد الصفحة", onClick = onPageSetup)
-            }
-            RibbonTab.Insert -> Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 4.dp),
-            ) {
-                RibbonButton(Icons.Default.Numbers, "رقم الصفحة", active = page.showPageNumber, onClick = onTogglePageNumber)
-                RibbonButton(Icons.Default.TableChart, "جدول (قريباً)", enabled = false) {}
-                RibbonButton(Icons.Default.Image, "صورة (قريباً)", enabled = false) {}
-            }
-            RibbonTab.Layout -> Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 4.dp),
-            ) {
-                RibbonButton(Icons.Default.AspectRatio, "الهوامش", onClick = onPageSetup)
-                RibbonButton(Icons.Default.AspectRatio, "الاتجاه", onClick = onPageSetup)
-                RibbonButton(Icons.Default.AspectRatio, "الحجم", onClick = onPageSetup)
-                ToolDivider()
-                RibbonButton(Icons.AutoMirrored.Filled.FormatIndentIncrease, "مسافة +") { onChange(RichTextOps.changeIndent(value, +1)) }
-                RibbonButton(Icons.AutoMirrored.Filled.FormatIndentDecrease, "مسافة −") { onChange(RichTextOps.changeIndent(value, -1)) }
-                ToolDivider()
-                RibbonButton(Icons.Default.FormatLineSpacing, "مفرد") { onChange(RichTextOps.setLineSpacing(value, 1.0f)) }
-                RibbonButton(Icons.Default.FormatLineSpacing, "١٫٥") { onChange(RichTextOps.setLineSpacing(value, 1.5f)) }
-                RibbonButton(Icons.Default.FormatLineSpacing, "مزدوج") { onChange(RichTextOps.setLineSpacing(value, 2.0f)) }
-            }
-            RibbonTab.View -> Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 4.dp),
-            ) {
-                RibbonButton(Icons.Default.Straighten, if (showRuler) "إخفاء المسطرة" else "إظهار المسطرة", active = showRuler, onClick = onToggleRuler)
-            }
-            RibbonTab.Review -> Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                RibbonButton(Icons.Default.Search, "إيجاد واستبدال", onClick = onFindReplace)
-                ToolDivider()
-                Row(Modifier.padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.AutoMirrored.Filled.Notes, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("  عدد الكلمات: $wordCount", style = MaterialTheme.typography.bodyMedium)
-                }
-            }
-        }
-        HorizontalDivider()
-    }
-}
-
-@Composable
-private fun RibbonTabButton(label: String, selected: Boolean, onClick: () -> Unit) {
-    val color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-    Column(
-        Modifier.clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
+    Row(
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).background(MaterialTheme.colorScheme.surface),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(label, color = color, style = MaterialTheme.typography.titleSmall)
-        Box(
-            Modifier
-                .padding(top = 4.dp)
-                .height(2.dp)
-                .width(if (selected) 24.dp else 0.dp)
-                .background(MaterialTheme.colorScheme.primary),
-        )
+        MenuBarMenu("ملف", openMenu, onOpenMenu) { close ->
+            MenuRow("فتح", Icons.Default.FolderOpen) { close(); onOpen() }
+            MenuRow("حفظ", Icons.Default.Save) { close(); onSave() }
+            MenuRow("حفظ باسم…", Icons.Default.SaveAs) { close(); onSaveAs() }
+            HorizontalDivider()
+            MenuRow("تصدير PDF", Icons.Default.PictureAsPdf) { close(); onExportPdf() }
+            HorizontalDivider()
+            MenuRow("إعداد الصفحة", Icons.Default.AspectRatio) { close(); onPageSetup() }
+            MenuRow(if (page.showPageNumber) "إخفاء ترقيم الصفحات" else "إظهار ترقيم الصفحات", Icons.Default.Numbers) { close(); onTogglePageNumber() }
+        }
+        MenuBarMenu("تحرير", openMenu, onOpenMenu) { close ->
+            MenuRow("تراجع", Icons.AutoMirrored.Filled.Undo, enabled = canUndo) { close(); onUndo() }
+            MenuRow("إعادة", Icons.AutoMirrored.Filled.Redo, enabled = canRedo) { close(); onRedo() }
+            HorizontalDivider()
+            MenuRow("قص", Icons.Default.ContentCut) { close(); onCut() }
+            MenuRow("نسخ", Icons.Default.ContentCopy) { close(); onCopy() }
+            MenuRow("لصق", Icons.Default.ContentPaste) { close(); onPaste() }
+            HorizontalDivider()
+            MenuRow("تحديد الكل", Icons.Default.SelectAll) { close(); onSelectAll() }
+            MenuRow("بحث واستبدال", Icons.Default.Search) { close(); onFindReplace() }
+        }
+        MenuBarMenu("تنسيق", openMenu, onOpenMenu) { close ->
+            MenuRow("غامق", Icons.Default.FormatBold) { close(); onChange(RichTextOps.toggleBold(value)) }
+            MenuRow("مائل", Icons.Default.FormatItalic) { close(); onChange(RichTextOps.toggleItalic(value)) }
+            MenuRow("تسطير", Icons.Default.FormatUnderlined) { close(); onChange(RichTextOps.toggleUnderline(value)) }
+            MenuRow("يتوسطه خط", Icons.Default.StrikethroughS) { close(); onChange(RichTextOps.toggleStrike(value)) }
+            HorizontalDivider()
+            MenuRow("محاذاة يمين", Icons.AutoMirrored.Filled.FormatAlignRight) { close(); onChange(RichTextOps.setAlign(value, TextAlign.Right)) }
+            MenuRow("توسيط", Icons.Default.FormatAlignCenter) { close(); onChange(RichTextOps.setAlign(value, TextAlign.Center)) }
+            MenuRow("محاذاة يسار", Icons.AutoMirrored.Filled.FormatAlignLeft) { close(); onChange(RichTextOps.setAlign(value, TextAlign.Left)) }
+            MenuRow("ضبط", Icons.Default.FormatAlignJustify) { close(); onChange(RichTextOps.setAlign(value, TextAlign.Justify)) }
+        }
+        MenuBarMenu("إدراج", openMenu, onOpenMenu) { close ->
+            MenuRow(if (page.showPageNumber) "إخفاء رقم الصفحة" else "رقم الصفحة", Icons.Default.Numbers) { close(); onTogglePageNumber() }
+            MenuRow("جدول (قريباً)", Icons.Default.TableChart, enabled = false) { }
+            MenuRow("صورة (قريباً)", Icons.Default.Image, enabled = false) { }
+        }
+        MenuBarMenu("تخطيط", openMenu, onOpenMenu) { close ->
+            MenuRow("الهوامش / الحجم / الاتجاه", Icons.Default.AspectRatio) { close(); onPageSetup() }
+            HorizontalDivider()
+            MenuRow("زيادة المسافة البادئة", Icons.AutoMirrored.Filled.FormatIndentIncrease) { close(); onChange(RichTextOps.changeIndent(value, +1)) }
+            MenuRow("إنقاص المسافة البادئة", Icons.AutoMirrored.Filled.FormatIndentDecrease) { close(); onChange(RichTextOps.changeIndent(value, -1)) }
+            HorizontalDivider()
+            MenuRow("تباعد مفرد", Icons.Default.FormatLineSpacing) { close(); onChange(RichTextOps.setLineSpacing(value, 1.0f)) }
+            MenuRow("تباعد ١٫٥", Icons.Default.FormatLineSpacing) { close(); onChange(RichTextOps.setLineSpacing(value, 1.5f)) }
+            MenuRow("تباعد مزدوج", Icons.Default.FormatLineSpacing) { close(); onChange(RichTextOps.setLineSpacing(value, 2.0f)) }
+        }
+        MenuBarMenu("عرض", openMenu, onOpenMenu) { close ->
+            MenuRow(if (showRuler) "إخفاء المسطرة" else "إظهار المسطرة", Icons.Default.Straighten) { close(); onToggleRuler() }
+            MenuRow("عدد الكلمات", Icons.AutoMirrored.Filled.Notes) { close(); onWordCount() }
+        }
     }
 }
 
 @Composable
-private fun RibbonButton(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+private fun MenuBarMenu(
+    name: String,
+    openMenu: String?,
+    onOpenMenu: (String?) -> Unit,
+    content: @Composable ColumnScope.(close: () -> Unit) -> Unit,
+) {
+    Box {
+        Text(
+            name,
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.clickable { onOpenMenu(name) }.padding(horizontal = 14.dp, vertical = 12.dp),
+        )
+        DropdownMenu(expanded = openMenu == name, onDismissRequest = { onOpenMenu(null) }) {
+            content { onOpenMenu(null) }
+        }
+    }
+}
+
+@Composable
+private fun MenuRow(
     label: String,
-    active: Boolean = false,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
     enabled: Boolean = true,
     onClick: () -> Unit,
 ) {
-    val tint = when {
-        !enabled -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-        active -> MaterialTheme.colorScheme.primary
-        else -> MaterialTheme.colorScheme.onSurfaceVariant
-    }
-    Column(
-        Modifier
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 4.dp)
-            .widthIn(min = 56.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Icon(icon, contentDescription = label, tint = tint)
-        Text(label, style = MaterialTheme.typography.labelSmall, color = tint, maxLines = 1)
-    }
+    DropdownMenuItem(
+        text = { Text(label) },
+        leadingIcon = { Icon(icon, null) },
+        enabled = enabled,
+        onClick = onClick,
+    )
 }
 
 @Composable

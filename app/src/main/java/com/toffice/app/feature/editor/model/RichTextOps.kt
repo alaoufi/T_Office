@@ -236,6 +236,13 @@ object RichTextOps {
         ) to ranges.size
     }
 
+    /** يستبدل التحديد الحالي (أو يُدرج عند المؤشر) بنصّ عادي — لأوامر القص/اللصق. */
+    fun replaceSelection(v: TextFieldValue, replacement: String): TextFieldValue {
+        val s = minOf(v.selection.start, v.selection.end)
+        val e = maxOf(v.selection.start, v.selection.end)
+        return replaceRange(v, s, e, replacement)
+    }
+
     fun setFontFamily(v: TextFieldValue, code: Int): TextFieldValue {
         val (s, e) = bounds(v)
         if (s >= e) return v
