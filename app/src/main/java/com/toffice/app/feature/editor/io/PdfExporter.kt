@@ -178,6 +178,10 @@ object PdfExporter {
         if (a.fontFamily != com.toffice.app.feature.editor.model.FONT_DEFAULT) {
             sb.setSpan(android.text.style.TypefaceSpan(com.toffice.app.feature.editor.model.fontNameOf(a.fontFamily)), s, e, flag)
         }
+        when (a.script) {
+            1 -> sb.setSpan(android.text.style.SuperscriptSpan(), s, e, flag)
+            2 -> sb.setSpan(android.text.style.SubscriptSpan(), s, e, flag)
+        }
         sb.setSpan(AbsoluteSizeSpan(a.sizeSp, false), s, e, flag)
         if (a.colorArgb != 0) sb.setSpan(ForegroundColorSpan(a.colorArgb), s, e, flag)
         if (a.highlightArgb != 0) sb.setSpan(BackgroundColorSpan(a.highlightArgb), s, e, flag)

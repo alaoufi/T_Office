@@ -251,6 +251,16 @@ object RichTextOps {
         }
     }
 
+    /** يبدّل الكتابة المرتفعة (١) أو المنخفضة (٢) على التحديد. */
+    fun toggleScript(v: TextFieldValue, code: Int): TextFieldValue {
+        val (s, e) = bounds(v)
+        if (s >= e) return v
+        return rebuild(v) { attrs, _, _ ->
+            val all = (s until e).all { attrs[it].script == code }
+            for (i in s until e) attrs[i] = attrs[i].copy(script = if (all) 0 else code)
+        }
+    }
+
     fun setAlign(v: TextFieldValue, align: TextAlign): TextFieldValue {
         val (s, e) = bounds(v)
         return rebuild(v) { _, aligns, _ ->

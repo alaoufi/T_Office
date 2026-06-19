@@ -77,6 +77,8 @@ import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.material.icons.filled.StrikethroughS
+import androidx.compose.material.icons.filled.Subscript
+import androidx.compose.material.icons.filled.Superscript
 import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material3.AlertDialog
@@ -855,6 +857,8 @@ private fun EditorMenuBar(
             MenuRow("مائل", Icons.Default.FormatItalic) { close(); onChange(RichTextOps.toggleItalic(value)) }
             MenuRow("تسطير", Icons.Default.FormatUnderlined) { close(); onChange(RichTextOps.toggleUnderline(value)) }
             MenuRow("يتوسطه خط", Icons.Default.StrikethroughS) { close(); onChange(RichTextOps.toggleStrike(value)) }
+            MenuRow("مرتفع X²", Icons.Default.Superscript) { close(); onChange(RichTextOps.toggleScript(value, 1)) }
+            MenuRow("منخفض X₂", Icons.Default.Subscript) { close(); onChange(RichTextOps.toggleScript(value, 2)) }
             HorizontalDivider()
             MenuRow("محاذاة يمين", Icons.AutoMirrored.Filled.FormatAlignRight) { close(); onChange(RichTextOps.setAlign(value, TextAlign.Right)) }
             MenuRow("توسيط", Icons.Default.FormatAlignCenter) { close(); onChange(RichTextOps.setAlign(value, TextAlign.Center)) }
@@ -1167,6 +1171,8 @@ private fun FormatToolbar(value: TextFieldValue, onChange: (TextFieldValue) -> U
             }
             DropdownMenu(expanded = moreMenu, onDismissRequest = { moreMenu = false }) {
                 MenuChoice("يتوسطه خط", Icons.Default.StrikethroughS, cur.strike) { onChange(RichTextOps.toggleStrike(value)); moreMenu = false }
+                MenuChoice("مرتفع X²", Icons.Default.Superscript, cur.script == 1) { onChange(RichTextOps.toggleScript(value, 1)); moreMenu = false }
+                MenuChoice("منخفض X₂", Icons.Default.Subscript, cur.script == 2) { onChange(RichTextOps.toggleScript(value, 2)); moreMenu = false }
                 MenuChoice("تظليل أصفر", Icons.Default.FormatColorFill, cur.highlightArgb != 0) { onChange(RichTextOps.setHighlight(value, 0xFFFFEB3B.toInt())); moreMenu = false }
                 MenuChoice("إزالة التظليل", Icons.Default.FormatColorReset, false) { onChange(RichTextOps.setHighlight(value, 0)); moreMenu = false }
             }

@@ -291,6 +291,17 @@ class RichTextOpsTest {
     fun fontName_exportName() {
         assertEquals("Amiri", fontNameOf(5))
         assertEquals("sans-serif", fontNameOf(0))
+        assertEquals("Arial", fontNameOf(23))
+        assertEquals("Times New Roman", fontNameOf(24))
+    }
+
+    @Test
+    fun script_toggleSuperscriptAndBack() {
+        val v = TextFieldValue(AnnotatedString("x2"), selection = TextRange(1, 2))
+        val sup = RichTextOps.toggleScript(v, 1)
+        assertEquals(1, sup.annotatedString.toCharAttrs()[1].script)
+        val back = RichTextOps.toggleScript(sup.copy(selection = TextRange(1, 2)), 1)
+        assertEquals(0, back.annotatedString.toCharAttrs()[1].script)
     }
 
     @Test

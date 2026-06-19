@@ -11,6 +11,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.BaselineShift
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextIndent
@@ -111,11 +112,12 @@ data class CharAttrs(
     val colorArgb: Int = COLOR_DEFAULT,
     val highlightArgb: Int = COLOR_DEFAULT,
     val fontFamily: Int = FONT_DEFAULT,
+    val script: Int = 0, // 0 عادي، 1 مرتفع (X²)، 2 منخفض (X₂)
 ) {
     fun isDefault(): Boolean =
         !bold && !italic && !underline && !strike &&
             sizeSp == DEFAULT_FONT_SP && colorArgb == COLOR_DEFAULT && highlightArgb == COLOR_DEFAULT &&
-            fontFamily == FONT_DEFAULT
+            fontFamily == FONT_DEFAULT && script == 0
 
     fun toSpanStyle(): SpanStyle {
         val decos = mutableListOf<TextDecoration>()
@@ -126,7 +128,12 @@ data class CharAttrs(
             fontStyle = if (italic) FontStyle.Italic else null,
             fontFamily = fontFamilyOf(fontFamily),
             textDecoration = if (decos.isEmpty()) null else TextDecoration.combine(decos),
-            fontSize = sizeSp.sp,
+            fontSize = if (script != 0) (sizeSp * 0.66f).sp else sizeSp.sp,
+            baselineShift = when (script) {
+                1 -> BaselineShift.Superscript
+                2 -> BaselineShift.Subscript
+                else -> null
+            },
             color = if (colorArgb != COLOR_DEFAULT) Color(colorArgb) else Color.Unspecified,
             background = if (highlightArgb != COLOR_DEFAULT) Color(highlightArgb) else Color.Unspecified,
         )
@@ -199,6 +206,13 @@ fun AnnotatedString.toCharAttrs(): MutableList<CharAttrs> {
             if (s.color != Color.Unspecified) a = a.copy(colorArgb = s.color.toArgb())
             if (s.background != Color.Unspecified) a = a.copy(highlightArgb = s.background.toArgb())
             if (s.fontFamily != null) a = a.copy(fontFamily = codeOfFontFamily(s.fontFamily))
+            if (s.baselineShift != null) a = a.copy(
+                script = when (s.baselineShift) {
+                    BaselineShift.Superscript -> 1
+                    BaselineShift.Subscript -> 2
+                    else -> 0
+                },
+            )
             attrs[i] = a
         }
     }
@@ -299,7 +313,7 @@ fun annotatedToJson(a: AnnotatedString): String {
                     .put("s", i).put("e", j)
                     .put("b", at.bold).put("i", at.italic).put("u", at.underline).put("st", at.strike)
                     .put("sz", at.sizeSp).put("c", at.colorArgb).put("hl", at.highlightArgb)
-                    .put("ff", at.fontFamily)
+                    .put("ff", at.fontFamily).put("sc", at.script)
             )
         }
         i = j
@@ -341,6 +355,7 @@ fun jsonToAnnotated(json: String): AnnotatedString {
             colorArgb = r.optInt("c", COLOR_DEFAULT),
             highlightArgb = r.optInt("hl", COLOR_DEFAULT),
             fontFamily = r.optInt("ff", FONT_DEFAULT),
+            script = r.optInt("sc", 0),
         )
         for (idx in s until e) attrs[idx] = a
     }
@@ -380,6 +395,7 @@ data class RunOut(
     val colorArgb: Int,
     val highlightArgb: Int,
     val fontFamily: Int = FONT_DEFAULT,
+    val script: Int = 0,
 )
 
 data class ParaOut(
@@ -407,7 +423,7 @@ fun AnnotatedString.toParagraphsOut(): List<ParaOut> {
             val a = attrs[i]
             var j = i + 1
             while (j < e && attrs[j] == a) j++
-            runs.add(RunOut(text.substring(i, j), a.bold, a.italic, a.underline, a.strike, a.sizeSp, a.colorArgb, a.highlightArgb, a.fontFamily))
+            runs.add(RunOut(text.substring(i, j), a.bold, a.italic, a.underline, a.strike, a.sizeSp, a.colorArgb, a.highlightArgb, a.fontFamily, a.script))
             i = j
         }
         result.add(

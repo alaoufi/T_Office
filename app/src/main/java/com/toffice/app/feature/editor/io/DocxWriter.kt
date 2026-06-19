@@ -169,6 +169,10 @@ object DocxWriter {
             val hex = String.format("%06X", r.highlightArgb and 0xFFFFFF)
             sb.append("<w:shd w:val=\"clear\" w:color=\"auto\" w:fill=\"").append(hex).append("\"/>")
         }
+        when (r.script) {
+            1 -> sb.append("<w:vertAlign w:val=\"superscript\"/>")
+            2 -> sb.append("<w:vertAlign w:val=\"subscript\"/>")
+        }
         if (rtl) sb.append("<w:rtl/>")
         sb.append("</w:rPr>")
         sb.append("<w:t xml:space=\"preserve\">").append(escape(r.text)).append("</w:t>")
