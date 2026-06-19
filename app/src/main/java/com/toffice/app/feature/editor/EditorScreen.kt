@@ -1086,13 +1086,15 @@ private fun StepperRow(label: String, value: Int, onMinus: () -> Unit, onPlus: (
     }
 }
 
-/** محرّر الجداول: خلايا قابلة للتحرير + إضافة/حذف صفوف وأعمدة + حذف الجدول. */
+/** محرّر الجداول: خلايا قابلة للتحرير + محاذاة لكل خلية + إضافة/حذف صفوف وأعمدة. */
 @Composable
 private fun TablesEditor(
     tables: List<TableData>,
     onChange: (index: Int, table: TableData) -> Unit,
     onDelete: (index: Int) -> Unit,
 ) {
+    // الخلية المحدّدة حالياً (جدول، صف، عمود) لتطبيق المحاذاة عليها
+    var sel by remember { mutableStateOf(Triple(-1, -1, -1)) }
     Column(Modifier.fillMaxWidth().padding(top = 12.dp)) {
         tables.forEachIndexed { ti, table ->
             Card(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
@@ -1103,18 +1105,39 @@ private fun TablesEditor(
                         TextButton(onClick = { onChange(ti, TableOps.addColumn(table)) }) { Text("+ عمود") }
                         TextButton(onClick = { onChange(ti, TableOps.deleteRow(table, table.rowCount - 1)) }) { Text("− صف") }
                         TextButton(onClick = { onChange(ti, TableOps.deleteColumn(table, table.colCount - 1)) }) { Text("− عمود") }
-                        TextButton(onClick = { onDelete(ti) }) { Text("حذف الجدول", color = MaterialTheme.colorScheme.error) }
+                        TextButton(onClick = { onDelete(ti) }) { Text("حذف", color = MaterialTheme.colorScheme.error) }
+                    }
+                    // محاذاة الخلية المحدّدة
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("محاذاة الخلية:", style = MaterialTheme.typography.labelSmall)
+                        val applyAlign: (Int) -> Unit = { a ->
+                            if (sel.first == ti && sel.second >= 0 && sel.third >= 0) {
+                                onChange(ti, TableOps.setCellAlign(table, sel.second, sel.third, a))
+                            }
+                        }
+                        IconButton(onClick = { applyAlign(3) }) { Icon(Icons.AutoMirrored.Filled.FormatAlignRight, "يمين") }
+                        IconButton(onClick = { applyAlign(1) }) { Icon(Icons.Default.FormatAlignCenter, "توسيط") }
+                        IconButton(onClick = { applyAlign(2) }) { Icon(Icons.AutoMirrored.Filled.FormatAlignLeft, "يسار") }
                     }
                     // الخلايا
                     table.rows.forEachIndexed { r, row ->
                         Row(Modifier.fillMaxWidth()) {
                             row.forEachIndexed { c, cell ->
+                                val ta = when (cell.align) {
+                                    1 -> TextAlign.Center
+                                    2 -> TextAlign.Left
+                                    3 -> TextAlign.Right
+                                    else -> TextAlign.Right
+                                }
                                 OutlinedTextField(
-                                    value = cell,
+                                    value = cell.text,
                                     onValueChange = { onChange(ti, TableOps.setCell(table, r, c, it)) },
                                     singleLine = false,
-                                    textStyle = TextStyle(fontSize = 14.sp),
-                                    modifier = Modifier.weight(1f).padding(2.dp),
+                                    textStyle = TextStyle(fontSize = 14.sp, textAlign = ta),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .padding(2.dp)
+                                        .onFocusChanged { if (it.isFocused) sel = Triple(ti, r, c) },
                                 )
                             }
                         }

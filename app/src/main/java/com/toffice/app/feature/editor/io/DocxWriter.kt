@@ -103,13 +103,18 @@ object DocxWriter {
             sb.append("<w:tr>")
             for (cell in row) {
                 sb.append("<w:tc><w:tcPr/>")
-                val jc = if (rtl) "right" else "left"
+                val jc = when (cell.align) {
+                    1 -> "center"
+                    2 -> "left"
+                    3 -> "right"
+                    else -> if (rtl) "right" else "left"
+                }
                 sb.append("<w:p><w:pPr>")
                 if (rtl) sb.append("<w:bidi/>")
                 sb.append("<w:jc w:val=\"").append(jc).append("\"/></w:pPr>")
                 sb.append("<w:r><w:rPr>")
                 if (rtl) sb.append("<w:rtl/>")
-                sb.append("</w:rPr><w:t xml:space=\"preserve\">").append(escape(cell)).append("</w:t></w:r></w:p>")
+                sb.append("</w:rPr><w:t xml:space=\"preserve\">").append(escape(cell.text)).append("</w:t></w:r></w:p>")
                 sb.append("</w:tc>")
             }
             sb.append("</w:tr>")

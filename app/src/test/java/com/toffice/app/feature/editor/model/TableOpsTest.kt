@@ -13,8 +13,14 @@ class TableOpsTest {
 
     @Test fun setCell_updatesOnlyTarget() {
         val t = TableOps.setCell(TableOps.newTable(2, 2), 0, 1, "س")
-        assertEquals("س", t.rows[0][1])
-        assertEquals("", t.rows[0][0])
+        assertEquals("س", t.rows[0][1].text)
+        assertEquals("", t.rows[0][0].text)
+    }
+
+    @Test fun setCellAlign_updatesAlign() {
+        val t = TableOps.setCellAlign(TableOps.newTable(2, 2), 1, 0, 1)
+        assertEquals(1, t.rows[1][0].align)
+        assertEquals(0, t.rows[0][0].align)
     }
 
     @Test fun addAndDeleteRowColumn() {

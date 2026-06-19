@@ -3,8 +3,11 @@ package com.toffice.app.feature.editor.model
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** بيانات جدول بسيط: صفوف من الخلايا النصّية (كل صف بنفس عدد الأعمدة). */
-data class TableData(val rows: List<List<String>>) {
+/** خلية جدول: نص + محاذاة (0=حسب الاتجاه، 1=توسيط، 2=يسار، 3=يمين). */
+data class TableCell(val text: String = "", val align: Int = 0)
+
+/** بيانات جدول بسيط: صفوف من الخلايا (كل صف بنفس عدد الأعمدة). */
+data class TableData(val rows: List<List<TableCell>>) {
     val rowCount: Int get() = rows.size
     val colCount: Int get() = rows.firstOrNull()?.size ?: 0
 }
@@ -15,22 +18,29 @@ object TableOps {
     fun newTable(rowCount: Int, colCount: Int): TableData {
         val r = rowCount.coerceIn(1, 50)
         val c = colCount.coerceIn(1, 20)
-        return TableData(List(r) { List(c) { "" } })
+        return TableData(List(r) { List(c) { TableCell() } })
     }
 
-    fun setCell(t: TableData, row: Int, col: Int, text: String): TableData {
+    private fun map(t: TableData, row: Int, col: Int, f: (TableCell) -> TableCell): TableData {
         if (row !in t.rows.indices || col < 0 || col >= t.colCount) return t
-        val rows = t.rows.mapIndexed { ri, r ->
-            if (ri == row) r.mapIndexed { ci, cell -> if (ci == col) text else cell } else r
-        }
-        return TableData(rows)
+        return TableData(
+            t.rows.mapIndexed { ri, r ->
+                if (ri == row) r.mapIndexed { ci, cell -> if (ci == col) f(cell) else cell } else r
+            },
+        )
     }
+
+    fun setCell(t: TableData, row: Int, col: Int, text: String): TableData =
+        map(t, row, col) { it.copy(text = text) }
+
+    fun setCellAlign(t: TableData, row: Int, col: Int, align: Int): TableData =
+        map(t, row, col) { it.copy(align = align) }
 
     fun addRow(t: TableData): TableData =
-        TableData(t.rows + listOf(List(t.colCount.coerceAtLeast(1)) { "" }))
+        TableData(t.rows + listOf(List(t.colCount.coerceAtLeast(1)) { TableCell() }))
 
     fun addColumn(t: TableData): TableData =
-        TableData(t.rows.map { it + "" })
+        TableData(t.rows.map { it + TableCell() })
 
     fun deleteRow(t: TableData, row: Int): TableData {
         if (t.rowCount <= 1 || row !in t.rows.indices) return t
@@ -48,7 +58,9 @@ object TableOps {
             val rowsArr = JSONArray()
             for (row in t.rows) {
                 val rowArr = JSONArray()
-                for (cell in row) rowArr.put(cell)
+                for (cell in row) {
+                    rowArr.put(JSONObject().put("t", cell.text).put("a", cell.align))
+                }
                 rowsArr.put(rowArr)
             }
             arr.put(JSONObject().put("rows", rowsArr))
@@ -61,11 +73,18 @@ object TableOps {
         val result = mutableListOf<TableData>()
         for (i in 0 until arr.length()) {
             val rowsArr = arr.getJSONObject(i).optJSONArray("rows") ?: JSONArray()
-            val rows = mutableListOf<List<String>>()
+            val rows = mutableListOf<List<TableCell>>()
             for (r in 0 until rowsArr.length()) {
                 val rowArr = rowsArr.getJSONArray(r)
-                val cells = mutableListOf<String>()
-                for (c in 0 until rowArr.length()) cells.add(rowArr.optString(c, ""))
+                val cells = mutableListOf<TableCell>()
+                for (c in 0 until rowArr.length()) {
+                    val cellObj = rowArr.optJSONObject(c)
+                    if (cellObj != null) {
+                        cells.add(TableCell(cellObj.optString("t", ""), cellObj.optInt("a", 0)))
+                    } else {
+                        cells.add(TableCell(rowArr.optString(c, "")))
+                    }
+                }
                 rows.add(cells)
             }
             if (rows.isNotEmpty()) result.add(TableData(rows))
