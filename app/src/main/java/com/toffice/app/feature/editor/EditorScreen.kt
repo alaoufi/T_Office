@@ -1107,9 +1107,8 @@ private fun TablesEditor(
                         TextButton(onClick = { onChange(ti, TableOps.deleteColumn(table, table.colCount - 1)) }) { Text("− عمود") }
                         TextButton(onClick = { onDelete(ti) }) { Text("حذف", color = MaterialTheme.colorScheme.error) }
                     }
-                    // محاذاة الخلية المحدّدة
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("محاذاة الخلية:", style = MaterialTheme.typography.labelSmall)
+                    // تحكّم الخلية/العمود المحدّد: محاذاة + عرض العمود
+                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
                         val applyAlign: (Int) -> Unit = { a ->
                             if (sel.first == ti && sel.second >= 0 && sel.third >= 0) {
                                 onChange(ti, TableOps.setCellAlign(table, sel.second, sel.third, a))
@@ -1118,6 +1117,12 @@ private fun TablesEditor(
                         IconButton(onClick = { applyAlign(3) }) { Icon(Icons.AutoMirrored.Filled.FormatAlignRight, "يمين") }
                         IconButton(onClick = { applyAlign(1) }) { Icon(Icons.Default.FormatAlignCenter, "توسيط") }
                         IconButton(onClick = { applyAlign(2) }) { Icon(Icons.AutoMirrored.Filled.FormatAlignLeft, "يسار") }
+                        Box(Modifier.width(1.dp).height(20.dp).background(MaterialTheme.colorScheme.outlineVariant))
+                        val widen: (Float) -> Unit = { d ->
+                            if (sel.first == ti && sel.third >= 0) onChange(ti, TableOps.widenColumn(table, sel.third, d))
+                        }
+                        TextButton(onClick = { widen(-0.2f) }) { Text("− عرض") }
+                        TextButton(onClick = { widen(0.2f) }) { Text("+ عرض") }
                     }
                     // الخلايا
                     table.rows.forEachIndexed { r, row ->
@@ -1129,13 +1134,15 @@ private fun TablesEditor(
                                     3 -> TextAlign.Right
                                     else -> TextAlign.Right
                                 }
+                                val selected = sel == Triple(ti, r, c)
                                 OutlinedTextField(
                                     value = cell.text,
                                     onValueChange = { onChange(ti, TableOps.setCell(table, r, c, it)) },
                                     singleLine = false,
                                     textStyle = TextStyle(fontSize = 14.sp, textAlign = ta),
+                                    label = if (selected) ({ Text("محدّدة") }) else null,
                                     modifier = Modifier
-                                        .weight(1f)
+                                        .weight(table.weightOf(c))
                                         .padding(2.dp)
                                         .onFocusChanged { if (it.isFocused) sel = Triple(ti, r, c) },
                                 )

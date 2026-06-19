@@ -87,9 +87,12 @@ object DocxWriter {
 
     private fun table(t: com.toffice.app.feature.editor.model.TableData, rtl: Boolean): String {
         if (t.rowCount == 0 || t.colCount == 0) return ""
+        val totalTwips = 9000 // عرض الجدول التقريبي
+        val sumW = (0 until t.colCount).sumOf { t.weightOf(it).toDouble() }.coerceAtLeast(0.1)
         val sb = StringBuilder()
         sb.append("<w:tbl><w:tblPr>")
-        sb.append("<w:tblW w:w=\"0\" w:type=\"auto\"/>")
+        sb.append("<w:tblW w:w=\"").append(totalTwips).append("\" w:type=\"dxa\"/>")
+        sb.append("<w:tblLayout w:type=\"fixed\"/>")
         if (rtl) sb.append("<w:bidiVisual/>")
         sb.append("<w:tblBorders>")
         for (edge in listOf("top", "left", "bottom", "right", "insideH", "insideV")) {
@@ -97,7 +100,10 @@ object DocxWriter {
         }
         sb.append("</w:tblBorders></w:tblPr>")
         sb.append("<w:tblGrid>")
-        repeat(t.colCount) { sb.append("<w:gridCol/>") }
+        for (i in 0 until t.colCount) {
+            val w = (totalTwips * t.weightOf(i) / sumW).toInt().coerceAtLeast(200)
+            sb.append("<w:gridCol w:w=\"").append(w).append("\"/>")
+        }
         sb.append("</w:tblGrid>")
         for (row in t.rows) {
             sb.append("<w:tr>")
