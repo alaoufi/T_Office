@@ -735,8 +735,8 @@ private fun FindReplaceBar(
     }
 }
 
-/** تبويبات الشريط (Ribbon) بنمط WPS. */
-enum class RibbonTab { File, Home, Insert, View, Review }
+/** تبويبات الشريط (Ribbon) بنمط Word/WPS. */
+enum class RibbonTab { File, Home, Insert, Layout, View, Review }
 
 /** عدد الكلمات في النص. */
 fun wordCount(text: String): Int =
@@ -769,6 +769,7 @@ private fun EditorRibbon(
             RibbonTabButton("ملف", tab == RibbonTab.File) { onTab(RibbonTab.File) }
             RibbonTabButton("الصفحة الرئيسية", tab == RibbonTab.Home) { onTab(RibbonTab.Home) }
             RibbonTabButton("إدراج", tab == RibbonTab.Insert) { onTab(RibbonTab.Insert) }
+            RibbonTabButton("تخطيط", tab == RibbonTab.Layout) { onTab(RibbonTab.Layout) }
             RibbonTabButton("عرض", tab == RibbonTab.View) { onTab(RibbonTab.View) }
             RibbonTabButton("مراجعة", tab == RibbonTab.Review) { onTab(RibbonTab.Review) }
         }
@@ -792,6 +793,20 @@ private fun EditorRibbon(
                 RibbonButton(Icons.Default.Numbers, "رقم الصفحة", active = page.showPageNumber, onClick = onTogglePageNumber)
                 RibbonButton(Icons.Default.TableChart, "جدول (قريباً)", enabled = false) {}
                 RibbonButton(Icons.Default.Image, "صورة (قريباً)", enabled = false) {}
+            }
+            RibbonTab.Layout -> Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 4.dp),
+            ) {
+                RibbonButton(Icons.Default.AspectRatio, "الهوامش", onClick = onPageSetup)
+                RibbonButton(Icons.Default.AspectRatio, "الاتجاه", onClick = onPageSetup)
+                RibbonButton(Icons.Default.AspectRatio, "الحجم", onClick = onPageSetup)
+                ToolDivider()
+                RibbonButton(Icons.AutoMirrored.Filled.FormatIndentIncrease, "مسافة +") { onChange(RichTextOps.changeIndent(value, +1)) }
+                RibbonButton(Icons.AutoMirrored.Filled.FormatIndentDecrease, "مسافة −") { onChange(RichTextOps.changeIndent(value, -1)) }
+                ToolDivider()
+                RibbonButton(Icons.Default.FormatLineSpacing, "مفرد") { onChange(RichTextOps.setLineSpacing(value, 1.0f)) }
+                RibbonButton(Icons.Default.FormatLineSpacing, "١٫٥") { onChange(RichTextOps.setLineSpacing(value, 1.5f)) }
+                RibbonButton(Icons.Default.FormatLineSpacing, "مزدوج") { onChange(RichTextOps.setLineSpacing(value, 2.0f)) }
             }
             RibbonTab.View -> Row(
                 Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 4.dp),

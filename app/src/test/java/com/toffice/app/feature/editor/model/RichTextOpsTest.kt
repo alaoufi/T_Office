@@ -178,17 +178,6 @@ class RichTextOpsTest {
     // ---- استقرار الاتجاه/المحاذاة ----
 
     @Test
-    fun emptyTrailingParagraph_keepsDirection() {
-        val ann = buildAnnotated(
-            "سطر\n",
-            List(4) { CharAttrs() },
-            listOf(TextAlign.Start, TextAlign.Start),
-            listOf(TextDirection.Rtl, TextDirection.Rtl),
-        )
-        assertEquals(TextDirection.Rtl, ann.toDirections()[1])
-    }
-
-    @Test
     fun directionPreservedAcrossBold() {
         val rtl = RichTextOps.setDirection(tfv("سطر"), TextDirection.Rtl)
         val bolded = RichTextOps.toggleBold(rtl.copy(selection = TextRange(0, 3)))
@@ -237,19 +226,48 @@ class RichTextOpsTest {
     }
 
     @Test
-    fun newParagraphInheritsDirection() {
-        // الفقرة الأولى RTL، ثم Enter ⇒ الفقرة الجديدة ترث RTL
-        val rtl = RichTextOps.setDirection(tfv("سطر"), TextDirection.Rtl)
-        val old = rtl.copy(selection = TextRange(3))
-        // محاكاة قيمة ما بعد Enter مع الحفاظ على نمط الفقرة الأولى
+    fun splitParagraphInheritsDirection() {
+        // Enter في منتصف فقرة RTL ⇒ النصف الثاني (فقرة غير فارغة) يرث RTL
+        val old = TextFieldValue(AnnotatedString("سطرنص"), selection = TextRange(3))
         val newAnn = buildAnnotated(
-            "سطر\n",
-            List(4) { CharAttrs() },
+            "سطر\nنص",
+            List(6) { CharAttrs() },
             listOf(TextAlign.Start, TextAlign.Start),
             listOf(TextDirection.Rtl, TextDirection.Content),
         )
         val new = TextFieldValue(newAnn, selection = TextRange(4))
         val r = RichTextOps.maybeContinueList(old, new)
         assertEquals(TextDirection.Rtl, r.annotatedString.toDirections()[1])
+    }
+
+    // ---- استقرار التحرير ----
+
+    @Test
+    fun continueList_noopOnDeletion() {
+        val old = tfv("• عنصر", selStart = 6, selEnd = 6)
+        val new = TextFieldValue(AnnotatedString("• عنص"), selection = TextRange(5))
+        assertEquals("• عنص", RichTextOps.maybeContinueList(old, new).annotatedString.text)
+    }
+
+    @Test
+    fun continueList_noopOnPaste() {
+        val old = tfv("اب", selStart = 2, selEnd = 2)
+        val new = TextFieldValue(AnnotatedString("اب نص كثير"), selection = TextRange(10))
+        assertEquals("اب نص كثير", RichTextOps.maybeContinueList(old, new).annotatedString.text)
+    }
+
+    @Test
+    fun formatting_preservesTextAndSelection() {
+        val v = TextFieldValue(AnnotatedString("نص مهم"), selection = TextRange(0, 6))
+        val r = RichTextOps.toggleBold(v)
+        assertEquals("نص مهم", r.annotatedString.text)
+        assertEquals(TextRange(0, 6), r.selection)
+    }
+
+    @Test
+    fun setSize_preservesText() {
+        val v = TextFieldValue(AnnotatedString("حجم"), selection = TextRange(0, 3))
+        val r = RichTextOps.setSize(v, 24)
+        assertEquals("حجم", r.annotatedString.text)
     }
 }

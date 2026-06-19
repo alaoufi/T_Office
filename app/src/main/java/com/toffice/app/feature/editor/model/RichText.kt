@@ -220,14 +220,12 @@ fun buildAnnotated(
     append(text)
     val paras = paragraphSpans(text)
     paras.forEachIndexed { idx, (s, e) ->
-        val al = aligns.getOrElse(idx) { TextAlign.Start }
-        val dir = directions.getOrElse(idx) { TextDirection.Content }
-        val ls = lineSpacings.getOrElse(idx) { 1f }
-        val ind = indents.getOrElse(idx) { 0 }
-        // نخزّن النمط للفقرات غير الفارغة، وكذلك للفقرة الفارغة الأخيرة إذا حملت تنسيقاً
-        // (لتبقى المحاذاة/الاتجاه مستقرّة عند بدء سطر جديد)
-        val nonDefault = al != TextAlign.Start || dir != TextDirection.Content || ls != 1f || ind > 0
-        if (e > s || nonDefault) {
+        // أنماط الفقرات للفقرات غير الفارغة فقط (تفادي نطاقات بطول صفر التي قد تزعزع المؤشر/التظليل)
+        if (e > s) {
+            val al = aligns.getOrElse(idx) { TextAlign.Start }
+            val dir = directions.getOrElse(idx) { TextDirection.Content }
+            val ls = lineSpacings.getOrElse(idx) { 1f }
+            val ind = indents.getOrElse(idx) { 0 }
             addStyle(
                 ParagraphStyle(
                     textAlign = al,
