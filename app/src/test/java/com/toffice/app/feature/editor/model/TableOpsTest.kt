@@ -31,6 +31,25 @@ class TableOpsTest {
         t = TableOps.deleteColumn(t, 0); assertEquals(2, t.colCount)
     }
 
+    @Test fun mergeAndSplitCell() {
+        var t = TableOps.newTable(2, 3)
+        t = TableOps.mergeRight(t, 0, 0)
+        assertEquals(2, t.rows[0][0].span)
+        t = TableOps.mergeRight(t, 0, 0)
+        assertEquals(3, t.rows[0][0].span)
+        // لا تتجاوز حدود الجدول
+        t = TableOps.mergeRight(t, 0, 0)
+        assertEquals(3, t.rows[0][0].span)
+        t = TableOps.splitCell(t, 0, 0)
+        assertEquals(1, t.rows[0][0].span)
+    }
+
+    @Test fun colWeight_changes() {
+        var t = TableOps.newTable(1, 2)
+        t = TableOps.widenColumn(t, 0, 0.5f)
+        assertEquals(1.5f, t.weightOf(0))
+    }
+
     @Test fun cannotDeleteLastRowOrColumn() {
         val t = TableOps.newTable(1, 1)
         assertEquals(1, TableOps.deleteRow(t, 0).rowCount)

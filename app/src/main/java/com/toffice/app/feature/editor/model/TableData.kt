@@ -3,8 +3,8 @@ package com.toffice.app.feature.editor.model
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** خلية جدول: نص + محاذاة (0=حسب الاتجاه، 1=توسيط، 2=يسار، 3=يمين). */
-data class TableCell(val text: String = "", val align: Int = 0)
+/** خلية جدول: نص + محاذاة (0=حسب الاتجاه، 1=توسيط، 2=يسار، 3=يمين) + امتداد أفقي span. */
+data class TableCell(val text: String = "", val align: Int = 0, val span: Int = 1)
 
 /** بيانات جدول: صفوف من الخلايا + أوزان عرض الأعمدة (مرونة كأنها Excel). */
 data class TableData(
@@ -50,6 +50,19 @@ object TableOps {
     fun setCellAlign(t: TableData, row: Int, col: Int, align: Int): TableData =
         map(t, row, col) { it.copy(align = align) }
 
+    /** دمج الخلية مع العمود التالي (امتداد أفقي). */
+    fun mergeRight(t: TableData, row: Int, col: Int): TableData {
+        if (row !in t.rows.indices || col < 0) return t
+        val cell = t.rows[row].getOrNull(col) ?: return t
+        val newSpan = cell.span + 1
+        if (col + newSpan > t.colCount) return t
+        return map(t, row, col) { it.copy(span = newSpan) }
+    }
+
+    /** فصل الخلية المدموجة (إرجاع الامتداد إلى ١). */
+    fun splitCell(t: TableData, row: Int, col: Int): TableData =
+        map(t, row, col) { it.copy(span = 1) }
+
     fun addRow(t: TableData): TableData =
         t.copy(rows = t.rows + listOf(List(t.colCount.coerceAtLeast(1)) { TableCell() }))
 
@@ -74,7 +87,7 @@ object TableOps {
             for (row in t.rows) {
                 val rowArr = JSONArray()
                 for (cell in row) {
-                    rowArr.put(JSONObject().put("t", cell.text).put("a", cell.align))
+                    rowArr.put(JSONObject().put("t", cell.text).put("a", cell.align).put("s", cell.span))
                 }
                 rowsArr.put(rowArr)
             }
@@ -97,7 +110,7 @@ object TableOps {
                 for (c in 0 until rowArr.length()) {
                     val cellObj = rowArr.optJSONObject(c)
                     if (cellObj != null) {
-                        cells.add(TableCell(cellObj.optString("t", ""), cellObj.optInt("a", 0)))
+                        cells.add(TableCell(cellObj.optString("t", ""), cellObj.optInt("a", 0), cellObj.optInt("s", 1)))
                     } else {
                         cells.add(TableCell(rowArr.optString(c, "")))
                     }

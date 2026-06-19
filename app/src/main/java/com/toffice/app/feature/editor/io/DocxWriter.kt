@@ -110,8 +110,13 @@ object DocxWriter {
         sb.append("</w:tblGrid>")
         for (row in t.rows) {
             sb.append("<w:tr>")
-            for (cell in row) {
-                sb.append("<w:tc><w:tcPr/>")
+            var ci = 0
+            while (ci < row.size) {
+                val cell = row[ci]
+                val span = cell.span.coerceIn(1, row.size - ci)
+                sb.append("<w:tc><w:tcPr>")
+                if (span > 1) sb.append("<w:gridSpan w:val=\"").append(span).append("\"/>")
+                sb.append("</w:tcPr>")
                 val jc = when (cell.align) {
                     1 -> "center"
                     2 -> "left"
@@ -125,6 +130,7 @@ object DocxWriter {
                 if (rtl) sb.append("<w:rtl/>")
                 sb.append("</w:rPr><w:t xml:space=\"preserve\">").append(escape(cell.text)).append("</w:t></w:r></w:p>")
                 sb.append("</w:tc>")
+                ci += span
             }
             sb.append("</w:tr>")
         }

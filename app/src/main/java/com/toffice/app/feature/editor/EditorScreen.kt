@@ -1147,29 +1147,38 @@ private fun TablesEditor(
                         }
                         TextButton(onClick = { widen(-0.2f) }) { Text("− عرض") }
                         TextButton(onClick = { widen(0.2f) }) { Text("+ عرض") }
+                        Box(Modifier.width(1.dp).height(20.dp).background(MaterialTheme.colorScheme.outlineVariant))
+                        TextButton(onClick = { if (sel.first == ti && sel.second >= 0 && sel.third >= 0) onChange(ti, TableOps.mergeRight(table, sel.second, sel.third)) }) { Text("دمج ←") }
+                        TextButton(onClick = { if (sel.first == ti && sel.second >= 0 && sel.third >= 0) onChange(ti, TableOps.splitCell(table, sel.second, sel.third)) }) { Text("فصل") }
                     }
-                    // الخلايا
+                    // الخلايا (مع تخطّي الخلايا المغطّاة بالدمج وامتداد الوزن)
                     table.rows.forEachIndexed { r, row ->
                         Row(Modifier.fillMaxWidth()) {
-                            row.forEachIndexed { c, cell ->
+                            var c = 0
+                            while (c < row.size) {
+                                val cell = row[c]
+                                val span = cell.span.coerceIn(1, row.size - c)
+                                val wsum = (c until c + span).sumOf { table.weightOf(it).toDouble() }.toFloat()
                                 val ta = when (cell.align) {
                                     1 -> TextAlign.Center
                                     2 -> TextAlign.Left
                                     3 -> TextAlign.Right
                                     else -> TextAlign.Right
                                 }
-                                val selected = sel == Triple(ti, r, c)
+                                val cc = c
+                                val selected = sel == Triple(ti, r, cc)
                                 OutlinedTextField(
                                     value = cell.text,
-                                    onValueChange = { onChange(ti, TableOps.setCell(table, r, c, it)) },
+                                    onValueChange = { onChange(ti, TableOps.setCell(table, r, cc, it)) },
                                     singleLine = false,
                                     textStyle = TextStyle(fontSize = 14.sp, textAlign = ta),
-                                    label = if (selected) ({ Text("محدّدة") }) else null,
+                                    label = if (selected) ({ Text(if (span > 1) "محدّدة (مدموجة ×$span)" else "محدّدة") }) else null,
                                     modifier = Modifier
-                                        .weight(table.weightOf(c))
+                                        .weight(wsum)
                                         .padding(2.dp)
-                                        .onFocusChanged { if (it.isFocused) sel = Triple(ti, r, c) },
+                                        .onFocusChanged { if (it.isFocused) sel = Triple(ti, r, cc) },
                                 )
+                                c += span
                             }
                         }
                     }
