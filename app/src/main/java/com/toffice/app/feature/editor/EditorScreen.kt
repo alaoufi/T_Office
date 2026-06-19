@@ -406,8 +406,8 @@ fun EditorScreen(
                 .fillMaxSize()
                 .padding(top = padding.calculateTopPadding(), bottom = padding.calculateBottomPadding()),
         ) {
-            // شريط القوائم الكلاسيكي + شريط تنسيق سريع — يتبع اتجاه الصفحة
-            CompositionLocalProviderDir(page.rtlPage) {
+            // شريط القوائم وشريط التنسيق دائماً RTL (واجهة التطبيق عربية) بغضّ النظر عن اتجاه صفحة المستند
+            CompositionLocalProviderDir(rtl = true) {
                 Column {
                     EditorMenuBar(
                         openMenu = openMenu,
