@@ -82,4 +82,6 @@ dependencies {
     testImplementation("androidx.compose.ui:ui-text")
     // org.json حقيقي للاختبارات (نسخة أندرويد مجرّد stub يرمي "not mocked")
     testImplementation("org.json:json:20231013")
+    // تنفيذ XmlPullParser حقيقي للاختبارات (قراءة DOCX)
+    testImplementation("net.sf.kxml:kxml2:2.3.0")
 }

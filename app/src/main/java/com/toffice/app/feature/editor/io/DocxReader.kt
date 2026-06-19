@@ -8,6 +8,8 @@ import com.toffice.app.feature.editor.model.COLOR_DEFAULT
 import com.toffice.app.feature.editor.model.DEFAULT_FONT_SP
 import com.toffice.app.feature.editor.model.DocBundle
 import com.toffice.app.feature.editor.model.PageSettings
+import com.toffice.app.feature.editor.model.TableCell
+import com.toffice.app.feature.editor.model.TableData
 import com.toffice.app.feature.editor.model.buildAnnotated
 import com.toffice.app.feature.editor.model.twipsToPt
 import org.xmlpull.v1.XmlPullParser
@@ -44,6 +46,7 @@ object DocxReader {
             page = parsed.second.copy(showPageNumber = showPageNumber, rtlPage = rtlPage),
             header = AnnotatedString(headerXml?.let { plainText(it) } ?: ""),
             footer = AnnotatedString(footerText),
+            tables = runCatching { parseTables(docXml) }.getOrDefault(emptyList()),
         )
     }
 
@@ -75,6 +78,7 @@ object DocxReader {
         var curAlign = TextAlign.Start
         var curDir = TextDirection.Content
         var inT = false
+        var tableDepth = 0 // محتوى الجداول يُحلَّل منفصلاً ولا يُدرج في المتن
 
         var rb = false; var ri = false; var ru = false; var rst = false
         var rsz = DEFAULT_FONT_SP; var rc = COLOR_DEFAULT; var rhl = COLOR_DEFAULT
@@ -89,7 +93,9 @@ object DocxReader {
         var event = parser.eventType
         while (event != XmlPullParser.END_DOCUMENT) {
             when (event) {
-                XmlPullParser.START_TAG -> when (local(parser.name)) {
+                XmlPullParser.START_TAG -> if (local(parser.name) == "tbl") {
+                    tableDepth++
+                } else if (tableDepth == 0) when (local(parser.name)) {
                     "p" -> {
                         if (!firstParagraph) { text.append('\n'); attrs.add(CharAttrs()) }
                         firstParagraph = false
@@ -127,8 +133,10 @@ object DocxReader {
                     "tab" -> appendText("    ")
                     "br" -> { text.append('\n'); attrs.add(CharAttrs()) }
                 }
-                XmlPullParser.TEXT -> if (inT) appendText(parser.text ?: "")
-                XmlPullParser.END_TAG -> when (local(parser.name)) {
+                XmlPullParser.TEXT -> if (tableDepth == 0 && inT) appendText(parser.text ?: "")
+                XmlPullParser.END_TAG -> if (local(parser.name) == "tbl") {
+                    if (tableDepth > 0) tableDepth--
+                } else if (tableDepth == 0) when (local(parser.name)) {
                     "t" -> inT = false
                     "p" -> { aligns.add(curAlign); directions.add(curDir) }
                 }
@@ -137,6 +145,76 @@ object DocxReader {
         }
 
         return buildAnnotated(text.toString(), attrs, aligns, directions) to page
+    }
+
+    /** يحلّل جداول المستند (w:tbl) إلى نموذجنا، مع gridSpan والمحاذاة وتنسيق بسيط للخلية. */
+    private fun parseTables(xml: String): List<TableData> {
+        val parser = newParser(xml)
+        val tables = mutableListOf<TableData>()
+
+        var rows = mutableListOf<List<TableCell>>()
+        var row = mutableListOf<TableCell>()
+        var cellText = StringBuilder()
+        var cellAlign = 0
+        var cellSpan = 1
+        var cellBold = false
+        var cellColor = 0L
+        var cellSize = 0
+        var inT = false
+        var depth = 0 // عمق w:tbl (لتفادي الجداول المتداخلة بشكل آمن)
+
+        var event = parser.eventType
+        while (event != XmlPullParser.END_DOCUMENT) {
+            val name = local(parser.name)
+            when (event) {
+                XmlPullParser.START_TAG -> when (name) {
+                    "tbl" -> { depth++; if (depth == 1) rows = mutableListOf() }
+                    "tr" -> if (depth == 1) row = mutableListOf()
+                    "tc" -> if (depth == 1) {
+                        cellText = StringBuilder(); cellAlign = 0; cellSpan = 1
+                        cellBold = false; cellColor = 0L; cellSize = 0
+                    }
+                    "gridSpan" -> if (depth == 1) cellSpan = (attr(parser, "val")?.toIntOrNull() ?: 1).coerceIn(1, 50)
+                    "jc" -> if (depth == 1) cellAlign = mapCellAlign(attr(parser, "val"))
+                    "b" -> if (depth == 1) cellBold = boolOn(attr(parser, "val"))
+                    "color" -> if (depth == 1) {
+                        val v = attr(parser, "val")
+                        if (v != null && v != "auto") parseHex(v)?.let { cellColor = it.toLong() and 0xFFFFFF }
+                    }
+                    "sz" -> if (depth == 1) attr(parser, "val")?.toIntOrNull()?.let { cellSize = (it / 2).coerceIn(8, 72) }
+                    "t" -> if (depth == 1) inT = true
+                    "tab" -> if (depth == 1 && inT) cellText.append("    ")
+                }
+                XmlPullParser.TEXT -> if (depth == 1 && inT) cellText.append(parser.text ?: "")
+                XmlPullParser.END_TAG -> when (name) {
+                    "t" -> if (depth == 1) inT = false
+                    "tc" -> if (depth == 1) {
+                        row.add(TableCell(cellText.toString().trim(), cellAlign, cellSpan, cellBold, cellColor, cellSize))
+                        // خلايا بديلة لتغطية الأعمدة المدموجة (ليتوافق مع نموذجنا)
+                        repeat(cellSpan - 1) { row.add(TableCell()) }
+                    }
+                    "tr" -> if (depth == 1 && row.isNotEmpty()) rows.add(row.toList())
+                    "tbl" -> {
+                        if (depth == 1 && rows.isNotEmpty()) {
+                            // توحيد عدد الأعمدة لأكبر صف (لتفادي صفوف ناقصة)
+                            val cols = rows.maxOf { it.size }
+                            val norm = rows.map { r -> if (r.size < cols) r + List(cols - r.size) { TableCell() } else r }
+                            tables.add(TableData(norm))
+                        }
+                        if (depth > 0) depth--
+                    }
+                }
+            }
+            event = parser.next()
+        }
+        return tables
+    }
+
+    private fun mapCellAlign(v: String?): Int = when (v) {
+        "center" -> 1
+        "left" -> 2
+        "right", "end" -> 3
+        else -> 0
     }
 
     /** استخراج نص بسيط من ترويسة/تذييل (الفقرات مفصولة بسطر جديد). */
