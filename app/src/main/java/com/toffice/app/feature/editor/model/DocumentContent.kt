@@ -97,7 +97,14 @@ object DocSerializer {
         return AnnotatedString(obj.optString(key, ""))
     }
 
-    fun parse(json: String): DocBundle {
+    fun parse(json: String): DocBundle = try {
+        parseStrict(json)
+    } catch (e: Exception) {
+        // حماية من التلف: لا تُسقط المحرّر؛ أعِد النص الخام إن أمكن
+        DocBundle(runCatching { jsonToAnnotated(json) }.getOrElse { AnnotatedString(json) })
+    }
+
+    private fun parseStrict(json: String): DocBundle {
         if (json.isBlank()) return DocBundle(AnnotatedString(""))
         val obj = JSONObject(json)
         // توافق مع الصيغة القديمة (المتن فقط)

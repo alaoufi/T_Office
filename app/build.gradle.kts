@@ -80,4 +80,6 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation(platform(libs.androidx.compose.bom))
     testImplementation("androidx.compose.ui:ui-text")
+    // org.json حقيقي للاختبارات (نسخة أندرويد مجرّد stub يرمي "not mocked")
+    testImplementation("org.json:json:20231013")
 }
