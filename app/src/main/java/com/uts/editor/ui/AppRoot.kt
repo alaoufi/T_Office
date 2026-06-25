@@ -77,6 +77,11 @@ fun AppRoot(
     var showSaveEncoding by remember { mutableStateOf(false) }
     var pendingClose by remember { mutableStateOf<Int?>(null) }
     var pendingSaveEncoding by remember { mutableStateOf<TextEncoding?>(null) }
+    var showSaveName by remember { mutableStateOf(false) }
+
+    val pickSaveFolderLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri -> uri?.let { viewModel.setSaveFolder(it) } }
 
     val openLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
@@ -98,6 +103,13 @@ fun AppRoot(
                 }
             }
         }
+    }
+
+    // Save flow for an unsaved document: use the default folder if one is set,
+    // otherwise fall back to the system "create document" picker.
+    val startNewSave: () -> Unit = {
+        if (settings.saveFolderUri != null) showSaveName = true
+        else { pendingSaveEncoding = null; saveAsLauncher.launch(viewModel.active?.doc?.displayName ?: "untitled.txt") }
     }
 
     LaunchedEffect(Unit) {
@@ -126,10 +138,7 @@ fun AppRoot(
                         Icon(Icons.Filled.Add, stringResource(R.string.action_new))
                     }
                     IconButton(onClick = {
-                        viewModel.save(onNeedSaveAs = {
-                            pendingSaveEncoding = null
-                            saveAsLauncher.launch(active?.doc?.displayName ?: "untitled.txt")
-                        })
+                        viewModel.save(onNeedSaveAs = startNewSave)
                     }) { Icon(Icons.Filled.Save, stringResource(R.string.action_save)) }
                     IconButton(onClick = { menuOpen = true }) {
                         Icon(Icons.Filled.MoreVert, stringResource(R.string.action_menu))
@@ -263,6 +272,20 @@ fun AppRoot(
         )
     }
 
+    if (showSaveName && active != null) {
+        FileNameDialog(
+            initial = active.doc.displayName,
+            folderName = settings.saveFolderName,
+            onConfirm = { name ->
+                showSaveName = false
+                viewModel.saveNewToDefaultFolder(name, onFallback = {
+                    pendingSaveEncoding = null; saveAsLauncher.launch(name)
+                })
+            },
+            onDismiss = { showSaveName = false },
+        )
+    }
+
     pendingClose?.let { idx ->
         val tab = viewModel.tabs.getOrNull(idx)
         if (tab != null) {
@@ -300,6 +323,8 @@ fun AppRoot(
             onLineNumbers = { scope.launch { viewModel.settingsStore.setLineNumbers(it) } },
             onWordWrap = { scope.launch { viewModel.settingsStore.setWordWrap(it) } },
             onLanguageApplied = onLanguageApplied,
+            onPickSaveFolder = { pickSaveFolderLauncher.launch(null) },
+            onClearSaveFolder = { viewModel.clearSaveFolder() },
             onDismiss = { showSettings = false },
         )
     }

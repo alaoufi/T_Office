@@ -1,8 +1,10 @@
 package com.uts.editor.data
 
 import android.content.ContentResolver
+import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import androidx.documentfile.provider.DocumentFile
 import com.uts.editor.model.LineEnding
 import com.uts.editor.model.LoadMode
 import com.uts.editor.model.TextEncoding
@@ -150,6 +152,29 @@ object FileIo {
             writer.flush()
         }
     }
+
+    /**
+     * Create (or overwrite) [fileName] inside the SAF tree [treeUri] and return
+     * its document Uri, ready to be written with [writeAll]. Used by the
+     * "default save folder" feature so new files land where the user chose.
+     */
+    fun createInTree(
+        context: Context,
+        treeUri: Uri,
+        fileName: String,
+        mime: String = "text/plain",
+    ): Uri? {
+        val tree = DocumentFile.fromTreeUri(context, treeUri) ?: return null
+        if (!tree.canWrite()) return null
+        // Overwrite a same-named file rather than creating "name (1)".
+        tree.findFile(fileName)?.delete()
+        val created = tree.createFile(mime, fileName) ?: return null
+        return created.uri
+    }
+
+    /** Best-effort display name for a SAF tree folder. */
+    fun treeDisplayName(context: Context, treeUri: Uri): String? =
+        runCatching { DocumentFile.fromTreeUri(context, treeUri)?.name }.getOrNull()
 
     private fun normalizeLineEndings(text: String, ending: LineEnding): String {
         if (ending == LineEnding.LF) {

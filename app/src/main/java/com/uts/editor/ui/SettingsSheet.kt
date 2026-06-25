@@ -38,6 +38,8 @@ fun SettingsSheet(
     onLineNumbers: (Boolean) -> Unit,
     onWordWrap: (Boolean) -> Unit,
     onLanguageApplied: () -> Unit,
+    onPickSaveFolder: () -> Unit,
+    onClearSaveFolder: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -90,6 +92,23 @@ fun SettingsSheet(
             ToggleRow(stringResource(R.string.word_wrap), settings.wordWrap, onWordWrap)
             ToggleRow(stringResource(R.string.settings_autosave), settings.autosaveEnabled, onAutosave,
                 subtitle = stringResource(R.string.settings_autosave_desc))
+
+            SectionTitle(stringResource(R.string.settings_save_folder))
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    settings.saveFolderName ?: stringResource(R.string.settings_save_folder_none),
+                    style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                if (settings.saveFolderUri != null) {
+                    androidx.compose.material3.TextButton(onClick = onClearSaveFolder) {
+                        Text(stringResource(R.string.settings_clear_folder))
+                    }
+                }
+                androidx.compose.material3.Button(onClick = onPickSaveFolder) {
+                    Text(stringResource(R.string.settings_choose_folder))
+                }
+            }
 
             Divider(Modifier.padding(vertical = 12.dp))
             SectionTitle(stringResource(R.string.settings_about))

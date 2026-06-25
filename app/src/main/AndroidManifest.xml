@@ -26,24 +26,71 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- Open text-like files from other apps -->
+            <!-- Open by MIME type: every text/* file, plus the common code/data
+                 MIME types, plus application/octet-stream (which is what most file
+                 managers report for code files like .kt/.py/.sql/.sh/.ini/.conf). -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <action android:name="android.intent.action.EDIT" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:mimeType="text/*" />
+                <data android:mimeType="application/json" />
+                <data android:mimeType="application/xml" />
+                <data android:mimeType="application/javascript" />
+                <data android:mimeType="application/ecmascript" />
+                <data android:mimeType="application/x-javascript" />
+                <data android:mimeType="application/typescript" />
+                <data android:mimeType="application/x-yaml" />
+                <data android:mimeType="application/yaml" />
+                <data android:mimeType="application/sql" />
+                <data android:mimeType="application/x-sql" />
+                <data android:mimeType="application/x-sh" />
+                <data android:mimeType="application/x-shellscript" />
+                <data android:mimeType="application/x-php" />
+                <data android:mimeType="application/x-httpd-php" />
+                <data android:mimeType="application/x-python" />
+                <data android:mimeType="application/x-yaml" />
+                <data android:mimeType="application/csv" />
+                <data android:mimeType="application/octet-stream" />
+                <data android:mimeType="application/zip" />
             </intent-filter>
+
+            <!-- Open by file extension (best-effort for file:// and content:// URIs
+                 whose path carries the extension). Covers all requested formats and
+                 any other extension a manager passes with a typed scheme. -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <action android:name="android.intent.action.EDIT" />
                 <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="application/json" />
-                <data android:mimeType="application/xml" />
-                <data android:mimeType="application/javascript" />
-                <data android:mimeType="application/x-yaml" />
-                <data android:mimeType="application/sql" />
-                <data android:mimeType="application/zip" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:host="*" />
+                <data android:mimeType="*/*" />
+                <data android:pathPattern=".*\\.txt" />
+                <data android:pathPattern=".*\\.csv" />
+                <data android:pathPattern=".*\\.json" />
+                <data android:pathPattern=".*\\.xml" />
+                <data android:pathPattern=".*\\.html" />
+                <data android:pathPattern=".*\\.htm" />
+                <data android:pathPattern=".*\\.css" />
+                <data android:pathPattern=".*\\.js" />
+                <data android:pathPattern=".*\\.ts" />
+                <data android:pathPattern=".*\\.sql" />
+                <data android:pathPattern=".*\\.php" />
+                <data android:pathPattern=".*\\.java" />
+                <data android:pathPattern=".*\\.kt" />
+                <data android:pathPattern=".*\\.kts" />
+                <data android:pathPattern=".*\\.py" />
+                <data android:pathPattern=".*\\.md" />
+                <data android:pathPattern=".*\\.log" />
+                <data android:pathPattern=".*\\.yaml" />
+                <data android:pathPattern=".*\\.yml" />
+                <data android:pathPattern=".*\\.ini" />
+                <data android:pathPattern=".*\\.conf" />
+                <data android:pathPattern=".*\\.bat" />
+                <data android:pathPattern=".*\\.sh" />
             </intent-filter>
 
             <!-- Receive shared text -->

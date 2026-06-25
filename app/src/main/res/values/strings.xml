@@ -72,6 +72,12 @@
     <string name="settings_autosave_desc">Keep an automatic recovery copy every 30 seconds</string>
     <string name="settings_syntax">Syntax highlighting</string>
     <string name="settings_about">About</string>
+    <string name="settings_save_folder">Default save folder</string>
+    <string name="settings_save_folder_none">Not set (ask each time)</string>
+    <string name="settings_choose_folder">Choose folder</string>
+    <string name="settings_clear_folder">Clear</string>
+    <string name="save_into_folder">Will be saved into: %1$s</string>
+    <string name="file_name_hint">File name</string>
 
     <!-- Recovery -->
     <string name="recovery_title">Recover unsaved work?</string>

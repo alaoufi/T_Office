@@ -105,6 +105,44 @@ fun EncodingDialog(
 }
 
 @Composable
+fun FileNameDialog(
+    initial: String,
+    folderName: String?,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var name by remember { mutableStateOf(initial) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(
+                onClick = { if (name.isNotBlank()) onConfirm(name.trim()) },
+                enabled = name.isNotBlank(),
+            ) { Text(stringResource(R.string.action_save)) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
+        title = { Text(stringResource(R.string.action_save)) },
+        text = {
+            Column {
+                if (folderName != null) {
+                    Text(
+                        stringResource(R.string.save_into_folder, folderName),
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(bottom = 6.dp),
+                    )
+                }
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    singleLine = true,
+                    label = { Text(stringResource(R.string.file_name_hint)) },
+                )
+            }
+        },
+    )
+}
+
+@Composable
 fun GotoLineDialog(maxLine: Int, onGo: (Int) -> Unit, onDismiss: () -> Unit) {
     var text by remember { mutableStateOf("") }
     AlertDialog(

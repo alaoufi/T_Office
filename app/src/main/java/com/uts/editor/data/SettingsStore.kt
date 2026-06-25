@@ -20,6 +20,10 @@ data class AppSettings(
     val syntaxEnabled: Boolean = true,
     val lineNumbers: Boolean = true,
     val wordWrap: Boolean = true,
+    /** SAF tree Uri (as string) of the default folder new files are saved into. */
+    val saveFolderUri: String? = null,
+    /** Human-readable name of that folder, for display in settings. */
+    val saveFolderName: String? = null,
 )
 
 private val Context.dataStore by preferencesDataStore(name = "uts_settings")
@@ -34,6 +38,8 @@ class SettingsStore(private val context: Context) {
         val SYNTAX = booleanPreferencesKey("syntax")
         val LINE_NUMBERS = booleanPreferencesKey("line_numbers")
         val WORD_WRAP = booleanPreferencesKey("word_wrap")
+        val SAVE_FOLDER_URI = stringPreferencesKey("save_folder_uri")
+        val SAVE_FOLDER_NAME = stringPreferencesKey("save_folder_name")
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { p ->
@@ -44,6 +50,8 @@ class SettingsStore(private val context: Context) {
             syntaxEnabled = p[Keys.SYNTAX] ?: true,
             lineNumbers = p[Keys.LINE_NUMBERS] ?: true,
             wordWrap = p[Keys.WORD_WRAP] ?: true,
+            saveFolderUri = p[Keys.SAVE_FOLDER_URI],
+            saveFolderName = p[Keys.SAVE_FOLDER_NAME],
         )
     }
 
@@ -55,6 +63,10 @@ class SettingsStore(private val context: Context) {
     suspend fun setSyntax(on: Boolean) = edit { it[Keys.SYNTAX] = on }
     suspend fun setLineNumbers(on: Boolean) = edit { it[Keys.LINE_NUMBERS] = on }
     suspend fun setWordWrap(on: Boolean) = edit { it[Keys.WORD_WRAP] = on }
+    suspend fun setSaveFolder(uri: String?, name: String?) = edit {
+        if (uri == null) it.remove(Keys.SAVE_FOLDER_URI) else it[Keys.SAVE_FOLDER_URI] = uri
+        if (name == null) it.remove(Keys.SAVE_FOLDER_NAME) else it[Keys.SAVE_FOLDER_NAME] = name
+    }
 
     // --- Per-file last encoding memory ---
 

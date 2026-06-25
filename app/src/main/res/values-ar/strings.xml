@@ -72,6 +72,12 @@
     <string name="settings_autosave_desc">الاحتفاظ بنسخة استعادة تلقائية كل 30 ثانية</string>
     <string name="settings_syntax">تلوين الأكواد</string>
     <string name="settings_about">حول التطبيق</string>
+    <string name="settings_save_folder">مجلد الحفظ الافتراضي</string>
+    <string name="settings_save_folder_none">غير محدد (السؤال في كل مرة)</string>
+    <string name="settings_choose_folder">اختيار مجلد</string>
+    <string name="settings_clear_folder">مسح</string>
+    <string name="save_into_folder">سيُحفظ في: %1$s</string>
+    <string name="file_name_hint">اسم الملف</string>
 
     <!-- Recovery -->
     <string name="recovery_title">استعادة العمل غير المحفوظ؟</string>

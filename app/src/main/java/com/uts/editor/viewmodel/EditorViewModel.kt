@@ -345,6 +345,46 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         writeTo(tab, uri, encoding ?: tab.doc.encoding)
     }
 
+    /** Persist the user's chosen default save folder (a SAF tree Uri). */
+    fun setSaveFolder(treeUri: Uri) {
+        viewModelScope.launch {
+            runCatching {
+                resolver.takePersistableUriPermission(
+                    treeUri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                )
+            }
+            val name = withContext(Dispatchers.IO) { FileIo.treeDisplayName(getApplication(), treeUri) }
+            settingsStore.setSaveFolder(treeUri.toString(), name)
+        }
+    }
+
+    fun clearSaveFolder() {
+        viewModelScope.launch { settingsStore.setSaveFolder(null, null) }
+    }
+
+    /**
+     * Create [fileName] inside the configured default folder and save the active
+     * tab there. Returns false (so the caller can fall back to Save As) when no
+     * folder is set or creation fails.
+     */
+    fun saveNewToDefaultFolder(fileName: String, onFallback: () -> Unit) {
+        val tab = active ?: return
+        viewModelScope.launch {
+            val folder = settingsStore.current().saveFolderUri
+            if (folder == null) { onFallback(); return@launch }
+            val uri = withContext(Dispatchers.IO) {
+                FileIo.createInTree(getApplication(), Uri.parse(folder), fileName)
+            }
+            if (uri == null) { emit("Could not write to the chosen folder."); onFallback(); return@launch }
+            tab.doc = tab.doc.copy(
+                uri = uri, displayName = fileName,
+                language = SyntaxLanguage.fromFileName(fileName),
+            )
+            writeTo(tab, uri, tab.doc.encoding)
+        }
+    }
+
     fun saveWithEncoding(encoding: TextEncoding) {
         val tab = active ?: return
         val uri = tab.doc.uri ?: return
