@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Universal Text Studio</string>
+    <string name="app_name">Global Text Editor</string>
 
     <!-- Actions -->
     <string name="action_new">New</string>
@@ -97,5 +97,5 @@
     <string name="confirm_discard_save">Save</string>
     <string name="confirm_discard_dont_save">Don\'t save</string>
 
-    <string name="about_text">Universal Text Studio — a fast, Unicode-safe text editor with first-class Arabic support and automatic encoding detection.</string>
+    <string name="about_text">Global Text Editor — a fast, Unicode-safe text editor with first-class Arabic support and automatic encoding detection.</string>
 </resources>

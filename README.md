@@ -1,4 +1,4 @@
-# Universal Text Studio · استوديو النصوص الشامل
+# Global Text Editor · محرر النصوص العالمي
 
 A fast, lightweight Android text editor with **first-class Arabic support** and
 **automatic encoding detection** that never corrupts text — Arabic, English, or
@@ -13,7 +13,7 @@ any world encoding.
 
 ## Download / التحميل
 
-Pre-built signed APK: [`dist/UniversalTextStudio-v1.0-release.apk`](dist/UniversalTextStudio-v1.0-release.apk) (~1.4 MB).
+Pre-built signed APK: [`dist/GlobalTextEditor-v1.0-release.apk`](dist/GlobalTextEditor-v1.0-release.apk) (~1.4 MB).
 
 > The release is signed with the self-signed key in `release.keystore` (dev key).
 > **Replace it with your own keystore before publishing to Google Play.**
