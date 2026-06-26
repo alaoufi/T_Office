@@ -629,6 +629,17 @@ private fun SwatchSection(labelRes: Int, presets: List<Int>, onPick: (Int?) -> U
         modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
     )
     Row(Modifier.padding(horizontal = 8.dp, vertical = 2.dp)) {
+        // Clear-this-attribute chip.
+        Surface(
+            shape = RoundedCornerShape(6.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+            color = MaterialTheme.colorScheme.surface,
+            modifier = Modifier.padding(3.dp).size(30.dp).clickable { onPick(null) },
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(Icons.Filled.FormatClear, contentDescription = null, modifier = Modifier.size(16.dp))
+            }
+        }
         presets.take(6).forEach { c ->
             Surface(
                 color = Color(c),

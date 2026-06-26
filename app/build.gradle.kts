@@ -12,8 +12,8 @@ android {
         applicationId = "com.uts.editor"
         minSdk = 26
         targetSdk = 34
-        versionCode = 3
-        versionName = "1.2"
+        versionCode = 4
+        versionName = "1.3"
         vectorDrawables { useSupportLibrary = true }
         // Keep app lightweight: only ship the resources we use.
         resourceConfigurations += listOf("en", "ar")

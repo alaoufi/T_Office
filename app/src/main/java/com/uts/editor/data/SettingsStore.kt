@@ -84,7 +84,7 @@ class SettingsStore(private val context: Context) {
         if (name == null) it.remove(Keys.SAVE_FOLDER_NAME) else it[Keys.SAVE_FOLDER_NAME] = name
     }
     suspend fun setEditorAlign(align: Int) = edit { it[Keys.EDITOR_ALIGN] = align.coerceIn(0, 3) }
-    suspend fun setLineSpacing(mult: Float) = edit { it[Keys.LINE_SPACING] = mult.coerceIn(1.0f, 2.5f) }
+    suspend fun setLineSpacing(mult: Float) = edit { it[Keys.LINE_SPACING] = mult.coerceIn(0.7f, 3.0f) }
     suspend fun setTextColor(color: Int?) = edit {
         if (color == null) it.remove(Keys.TEXT_COLOR) else it[Keys.TEXT_COLOR] = color
     }

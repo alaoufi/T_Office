@@ -394,18 +394,52 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         return s until e
     }
 
-    fun applyBold() = addSpan { it.copy(bold = true) }
-    fun applyItalic() = addSpan { it.copy(italic = true) }
-    fun applyTextColor(color: Int?) = if (color == null) Unit else addSpan { it.copy(color = color) }
-    fun applyHighlight(color: Int?) = if (color == null) Unit else addSpan { it.copy(bg = color) }
-    fun applyFontSize(sizeSp: Float) = addSpan { it.copy(sizeSp = sizeSp) }
+    fun applyBold() {
+        val tab = active ?: return
+        val r = formatRange(tab)
+        val s = r.first; val e = r.last + 1
+        val alreadyBold = tab.spans.any { it.bold && it.start <= s && it.end >= e }
+        // Toggle: if the whole range is already bold, remove it; otherwise set it.
+        applyAttr({ it.bold }, if (alreadyBold) null else { st, en -> RichSpan(st, en, bold = true) })
+    }
 
-    private fun addSpan(build: (RichSpan) -> RichSpan) {
+    fun applyItalic() {
+        val tab = active ?: return
+        val r = formatRange(tab)
+        val s = r.first; val e = r.last + 1
+        val alreadyItalic = tab.spans.any { it.italic && it.start <= s && it.end >= e }
+        applyAttr({ it.italic }, if (alreadyItalic) null else { st, en -> RichSpan(st, en, italic = true) })
+    }
+
+    fun applyTextColor(color: Int?) =
+        applyAttr({ it.color != null }, color?.let { c -> { st, en -> RichSpan(st, en, color = c) } })
+
+    fun applyHighlight(color: Int?) =
+        applyAttr({ it.bg != null }, color?.let { c -> { st, en -> RichSpan(st, en, bg = c) } })
+
+    fun applyFontSize(sizeSp: Float) =
+        applyAttr({ it.sizeSp != null }, { st, en -> RichSpan(st, en, sizeSp = sizeSp) })
+
+    /**
+     * Replace one attribute over the selection: clip any existing spans of the
+     * same attribute out of the range (so the new value overrides the old one
+     * instead of layering on top), then add the new span if [make] is provided.
+     */
+    private fun applyAttr(sameAttr: (RichSpan) -> Boolean, make: ((Int, Int) -> RichSpan)?) {
         val tab = active ?: return
         if (tab.doc.loadMode == LoadMode.READONLY_LARGE) return
         val r = formatRange(tab)
-        if (r.isEmpty()) return
-        tab.spans.add(build(RichSpan(r.first, r.last + 1)))
+        val s = r.first; val e = r.last + 1
+        if (s >= e) return
+        val kept = tab.spans.flatMap { sp ->
+            if (!sameAttr(sp) || sp.end <= s || sp.start >= e) listOf(sp)
+            else buildList {
+                if (sp.start < s) add(sp.copy(end = s))
+                if (sp.end > e) add(sp.copy(start = e))
+            }
+        }.toMutableList()
+        make?.let { kept.add(it(s, e)) }
+        tab.spans.clear(); tab.spans.addAll(kept)
     }
 
     /** Remove all formatting overlapping the selection/current paragraph. */
@@ -526,7 +560,7 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         val last = lineIndexOf(text, maxOf(tab.field.selection.start, tab.field.selection.end))
         for (ln in first..last) {
             val current = tab.lineSpacings[ln] ?: DEFAULT_LINE_SPACING
-            tab.lineSpacings[ln] = (current + delta).coerceIn(1.0f, 2.5f)
+            tab.lineSpacings[ln] = (current + delta).coerceIn(0.7f, 3.0f)
         }
     }
 
