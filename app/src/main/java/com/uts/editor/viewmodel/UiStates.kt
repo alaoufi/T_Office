@@ -71,6 +71,10 @@ class EditorTab(initialDoc: DocumentState, initialField: TextFieldValue) {
     var pageStartLine by mutableIntStateOf(0)
     var totalLinesEstimate by mutableIntStateOf(0)
 
+    /** Per-paragraph alignment override (line index -> 0 start/1 center/2 end/3 justify).
+     *  Display-only; not stored in the plain-text file. */
+    val lineAligns = androidx.compose.runtime.mutableStateMapOf<Int, Int>()
+
     private val undoStack = ArrayDeque<TextFieldValue>()
     private val redoStack = ArrayDeque<TextFieldValue>()
     private val maxHistory = 200

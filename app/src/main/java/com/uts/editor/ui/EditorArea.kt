@@ -24,6 +24,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.ParagraphStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
@@ -32,6 +33,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -58,7 +60,8 @@ fun EditorArea(
     readOnly: Boolean,
     matches: List<IntRange>,
     currentMatch: Int,
-    editorAlign: Int = 0,
+    lineAligns: Map<Int, Int> = emptyMap(),
+    lineSpacing: Float = 1.6f,
     textColorOverride: Int? = null,
     bgColorOverride: Int? = null,
     modifier: Modifier = Modifier,
@@ -74,12 +77,6 @@ fun EditorArea(
     val currentBg = MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
     val textColor = textColorOverride?.let { Color(it) } ?: MaterialTheme.colorScheme.onSurface
     val bgColor = bgColorOverride?.let { Color(it) }
-    val align = when (editorAlign) {
-        1 -> androidx.compose.ui.text.style.TextAlign.Center
-        2 -> androidx.compose.ui.text.style.TextAlign.End
-        3 -> androidx.compose.ui.text.style.TextAlign.Justify
-        else -> androidx.compose.ui.text.style.TextAlign.Start
-    }
 
     // Use a monospace face only for code; plain text (where Arabic documents
     // live) uses the default family, whose Arabic shaping is correct on all
@@ -89,10 +86,8 @@ fun EditorArea(
         TextStyle(
             fontFamily = editorFont,
             fontSize = fontSizeSp.sp,
-            // Comfortable line spacing so lines are clearly separated and readable.
-            lineHeight = (fontSizeSp * 1.6f).sp,
+            lineHeight = (fontSizeSp * lineSpacing).sp,
             color = textColor,
-            textAlign = align,
             textDirection = TextDirection.Content,
         )
     )
@@ -100,15 +95,29 @@ fun EditorArea(
     // Pre-compute logical line start offsets for the gutter (cheap, on text change).
     val lineStarts = remember(value.text) { computeLineStarts(value.text) }
 
-    val transformation = remember(language, syntaxEnabled, syntaxColors, matches, currentMatch) {
+    val transformation = remember(language, syntaxEnabled, syntaxColors, matches, currentMatch, lineAligns, lineStarts) {
         VisualTransformation { input ->
             val annotated = if (syntaxEnabled) {
                 SyntaxHighlighter.highlight(input.text, language, syntaxColors)
             } else {
                 androidx.compose.ui.text.AnnotatedString(input.text)
             }
-            val withMatches = buildAnnotatedString {
+            val withStyles = buildAnnotatedString {
                 append(annotated)
+                // Per-paragraph alignment (applied only to lines the user aligned).
+                for ((lineIdx, a) in lineAligns) {
+                    if (a == 0 || lineIdx < 0 || lineIdx >= lineStarts.size) continue
+                    val start = lineStarts[lineIdx].coerceIn(0, input.text.length)
+                    val end = (if (lineIdx + 1 < lineStarts.size) lineStarts[lineIdx + 1] else input.text.length)
+                        .coerceIn(start, input.text.length)
+                    val ta = when (a) {
+                        1 -> TextAlign.Center
+                        2 -> TextAlign.End
+                        3 -> TextAlign.Justify
+                        else -> TextAlign.Start
+                    }
+                    addStyle(ParagraphStyle(textAlign = ta), start, end)
+                }
                 matches.forEachIndexed { i, r ->
                     val bg = if (i == currentMatch) currentBg else matchBg
                     val start = r.first.coerceIn(0, input.text.length)
@@ -116,7 +125,7 @@ fun EditorArea(
                     if (start < end) addStyle(SpanStyle(background = bg), start, end)
                 }
             }
-            TransformedText(withMatches, androidx.compose.ui.text.input.OffsetMapping.Identity)
+            TransformedText(withStyles, androidx.compose.ui.text.input.OffsetMapping.Identity)
         }
     }
 

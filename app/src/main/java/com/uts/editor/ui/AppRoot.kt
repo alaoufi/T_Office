@@ -209,13 +209,16 @@ fun AppRoot(
                     onPrint = { menuOpen = false; active?.let { PrintHelper.print(context, it.doc.displayName, it.field.text) } },
                     onSettings = { menuOpen = false; showSettings = true },
                     fontSize = settings.fontSizeSp,
-                    currentAlign = settings.editorAlign,
+                    lineSpacing = settings.lineSpacing,
+                    currentAlign = viewModel.caretLineAlignment(),
                     onUndo = { viewModel.undo() },
                     onRedo = { viewModel.redo() },
                     onFind = { viewModel.showFind(true) },
                     onFontDecrease = { scope.launch { viewModel.settingsStore.setFontSize(settings.fontSizeSp - 1f) } },
                     onFontIncrease = { scope.launch { viewModel.settingsStore.setFontSize(settings.fontSizeSp + 1f) } },
-                    onSetAlign = { a -> scope.launch { viewModel.settingsStore.setEditorAlign(a) } },
+                    onSpacingDecrease = { scope.launch { viewModel.settingsStore.setLineSpacing(settings.lineSpacing - 0.1f) } },
+                    onSpacingIncrease = { scope.launch { viewModel.settingsStore.setLineSpacing(settings.lineSpacing + 0.1f) } },
+                    onSetAlign = { a -> viewModel.setLineAlignment(a) },
                     onPickTextColor = { c -> scope.launch { viewModel.settingsStore.setTextColor(c) } },
                     onPickBgColor = { c -> scope.launch { viewModel.settingsStore.setBgColor(c) } },
                     onVoice = onVoice,
@@ -261,7 +264,8 @@ fun AppRoot(
                             readOnly = readOnly,
                             matches = viewModel.findState.matches,
                             currentMatch = viewModel.findState.current,
-                            editorAlign = settings.editorAlign,
+                            lineAligns = active.lineAligns.toMap(),
+                            lineSpacing = settings.lineSpacing,
                             textColorOverride = settings.textColor,
                             bgColorOverride = settings.bgColor,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
@@ -389,12 +393,15 @@ private fun CompactToolbar(
     onPrint: () -> Unit,
     onSettings: () -> Unit,
     fontSize: Float,
+    lineSpacing: Float,
     currentAlign: Int,
     onUndo: () -> Unit,
     onRedo: () -> Unit,
     onFind: () -> Unit,
     onFontDecrease: () -> Unit,
     onFontIncrease: () -> Unit,
+    onSpacingDecrease: () -> Unit,
+    onSpacingIncrease: () -> Unit,
     onSetAlign: (Int) -> Unit,
     onPickTextColor: (Int?) -> Unit,
     onPickBgColor: (Int?) -> Unit,
@@ -449,8 +456,11 @@ private fun CompactToolbar(
                 AlignMenu(currentAlign = currentAlign, onSetAlign = onSetAlign)
                 FontMenu(
                     fontSize = fontSize,
+                    lineSpacing = lineSpacing,
                     onFontDecrease = onFontDecrease,
                     onFontIncrease = onFontIncrease,
+                    onSpacingDecrease = onSpacingDecrease,
+                    onSpacingIncrease = onSpacingIncrease,
                     onPickTextColor = onPickTextColor,
                     onPickBgColor = onPickBgColor,
                 )
@@ -508,8 +518,11 @@ private fun AlignItem(icon: ImageVector, labelRes: Int, selected: Boolean, onCli
 @Composable
 private fun FontMenu(
     fontSize: Float,
+    lineSpacing: Float,
     onFontDecrease: () -> Unit,
     onFontIncrease: () -> Unit,
+    onSpacingDecrease: () -> Unit,
+    onSpacingIncrease: () -> Unit,
     onPickTextColor: (Int?) -> Unit,
     onPickBgColor: (Int?) -> Unit,
 ) {
@@ -517,25 +530,37 @@ private fun FontMenu(
     Box {
         ToolButton(Icons.Filled.FormatSize, R.string.tool_font, onClick = { open = true })
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            // Font size row.
-            Row(
-                Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(stringResource(R.string.settings_font_size), style = MaterialTheme.typography.bodyMedium)
-                Spacer(Modifier.width(8.dp))
-                IconButton(onClick = onFontDecrease, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Filled.Remove, stringResource(R.string.tool_font_decrease), Modifier.size(18.dp))
-                }
-                Text("${fontSize.toInt()}", style = MaterialTheme.typography.bodyMedium)
-                IconButton(onClick = onFontIncrease, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Filled.Add, stringResource(R.string.tool_font_increase), Modifier.size(18.dp))
-                }
-            }
+            StepperRow(
+                label = stringResource(R.string.settings_font_size),
+                value = "${fontSize.toInt()}",
+                onDecrease = onFontDecrease, onIncrease = onFontIncrease,
+            )
+            StepperRow(
+                label = stringResource(R.string.tool_line_spacing),
+                value = String.format("%.1f", lineSpacing),
+                onDecrease = onSpacingDecrease, onIncrease = onSpacingIncrease,
+            )
             HorizontalDivider()
             SwatchSection(R.string.tool_text_color, TEXT_COLOR_PRESETS, onPickTextColor)
             HorizontalDivider()
             SwatchSection(R.string.tool_bg_color, BG_COLOR_PRESETS, onPickBgColor)
+        }
+    }
+}
+
+@Composable
+private fun StepperRow(label: String, value: String, onDecrease: () -> Unit, onIncrease: () -> Unit) {
+    Row(
+        Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(96.dp))
+        IconButton(onClick = onDecrease, modifier = Modifier.size(36.dp)) {
+            Icon(Icons.Filled.Remove, stringResource(R.string.tool_font_decrease), Modifier.size(18.dp))
+        }
+        Text(value, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(36.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        IconButton(onClick = onIncrease, modifier = Modifier.size(36.dp)) {
+            Icon(Icons.Filled.Add, stringResource(R.string.tool_font_increase), Modifier.size(18.dp))
         }
     }
 }

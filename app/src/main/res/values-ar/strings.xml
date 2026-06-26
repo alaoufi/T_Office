@@ -45,6 +45,7 @@
     <string name="align_end">محاذاة للنهاية</string>
     <string name="align_justify">ضبط</string>
     <string name="tool_font">الخط</string>
+    <string name="tool_line_spacing">تباعد الأسطر</string>
     <string name="voice_unavailable">الإدخال الصوتي غير متوفر على هذا الجهاز.</string>
 
     <!-- Editor / status -->

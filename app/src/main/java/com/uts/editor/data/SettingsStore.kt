@@ -25,8 +25,10 @@ data class AppSettings(
     val saveFolderUri: String? = null,
     /** Human-readable name of that folder, for display in settings. */
     val saveFolderName: String? = null,
-    /** Editor text alignment: 0 = start, 1 = center, 2 = end. */
+    /** Editor text alignment: 0 = start, 1 = center, 2 = end, 3 = justify. */
     val editorAlign: Int = 0,
+    /** Line-height multiplier (1.0 .. 2.5). */
+    val lineSpacing: Float = 1.6f,
     /** Optional ARGB overrides for the editor (null = follow theme). */
     val textColor: Int? = null,
     val bgColor: Int? = null,
@@ -47,6 +49,7 @@ class SettingsStore(private val context: Context) {
         val SAVE_FOLDER_URI = stringPreferencesKey("save_folder_uri")
         val SAVE_FOLDER_NAME = stringPreferencesKey("save_folder_name")
         val EDITOR_ALIGN = intPreferencesKey("editor_align")
+        val LINE_SPACING = floatPreferencesKey("line_spacing")
         val TEXT_COLOR = intPreferencesKey("text_color")
         val BG_COLOR = intPreferencesKey("bg_color")
     }
@@ -62,6 +65,7 @@ class SettingsStore(private val context: Context) {
             saveFolderUri = p[Keys.SAVE_FOLDER_URI],
             saveFolderName = p[Keys.SAVE_FOLDER_NAME],
             editorAlign = p[Keys.EDITOR_ALIGN] ?: 0,
+            lineSpacing = p[Keys.LINE_SPACING] ?: 1.6f,
             textColor = p[Keys.TEXT_COLOR],
             bgColor = p[Keys.BG_COLOR],
         )
@@ -80,6 +84,7 @@ class SettingsStore(private val context: Context) {
         if (name == null) it.remove(Keys.SAVE_FOLDER_NAME) else it[Keys.SAVE_FOLDER_NAME] = name
     }
     suspend fun setEditorAlign(align: Int) = edit { it[Keys.EDITOR_ALIGN] = align.coerceIn(0, 3) }
+    suspend fun setLineSpacing(mult: Float) = edit { it[Keys.LINE_SPACING] = mult.coerceIn(1.0f, 2.5f) }
     suspend fun setTextColor(color: Int?) = edit {
         if (color == null) it.remove(Keys.TEXT_COLOR) else it[Keys.TEXT_COLOR] = color
     }

@@ -429,6 +429,32 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         refreshStats(tab)
     }
 
+    /** Apply [align] to every paragraph touched by the current selection/caret. */
+    fun setLineAlignment(align: Int) {
+        val tab = active ?: return
+        val text = tab.field.text
+        val selStart = minOf(tab.field.selection.start, tab.field.selection.end)
+        val selEnd = maxOf(tab.field.selection.start, tab.field.selection.end)
+        val firstLine = lineIndexOf(text, selStart)
+        val lastLine = lineIndexOf(text, selEnd)
+        for (ln in firstLine..lastLine) {
+            if (align == 0) tab.lineAligns.remove(ln) else tab.lineAligns[ln] = align
+        }
+    }
+
+    /** Alignment of the paragraph the caret is on (for reflecting state in the toolbar). */
+    fun caretLineAlignment(): Int {
+        val tab = active ?: return 0
+        return tab.lineAligns[lineIndexOf(tab.field.text, tab.field.selection.start)] ?: 0
+    }
+
+    private fun lineIndexOf(text: String, offset: Int): Int {
+        val safe = offset.coerceIn(0, text.length)
+        var count = 0
+        for (i in 0 until safe) if (text[i] == '\n') count++
+        return count
+    }
+
     /** Insert [insertText] at the caret, replacing any selection (used by voice input). */
     fun insertAtCursor(insertText: String) {
         val tab = active ?: return

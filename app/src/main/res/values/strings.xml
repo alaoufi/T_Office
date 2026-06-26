@@ -45,6 +45,7 @@
     <string name="align_end">End</string>
     <string name="align_justify">Justify</string>
     <string name="tool_font">Font</string>
+    <string name="tool_line_spacing">Line spacing</string>
     <string name="voice_unavailable">Voice input is not available on this device.</string>
 
     <!-- Editor / status -->
