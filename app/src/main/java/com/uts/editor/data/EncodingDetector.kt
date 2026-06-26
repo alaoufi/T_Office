@@ -35,7 +35,9 @@ data class DetectionResult(
 object EncodingDetector {
 
     private const val CONFIDENT = 90
-    private const val PROMPT_BELOW = 65
+    // Only fall back to the manual dialog when detection essentially has no
+    // signal; otherwise open automatically with the best guess.
+    private const val PROMPT_BELOW = 50
 
     /**
      * Heuristic check for whether [sample] is a *binary* (non-text) file such as
@@ -214,16 +216,20 @@ object EncodingDetector {
             .filter { it.first in arabicCandidates }
             .maxByOrNull { it.second.arabic }
 
-        bestArabic?.let { (enc, s) ->
-            val arabicRatio = if (s.total == 0) 0.0 else s.arabic.toDouble() / s.total
+        bestArabic?.let { (_, s) ->
             // Genuine Arabic forms multi-letter words (contiguous runs); European
             // accents mis-decoded as Arabic appear as isolated single characters
-            // wedged between Latin letters. Require most Arabic chars to be clustered.
+            // wedged between Latin letters. The cluster ratio separates the two.
             val clustered = if (s.arabic == 0) 0.0 else s.arabicInRuns.toDouble() / s.arabic
-            // Significant, clustered Arabic content -> confidently an Arabic codepage.
-            if (s.arabic > 0 && arabicRatio >= 0.12 && clustered >= 0.5) {
-                val confidence = (70 + (arabicRatio * 60)).toInt().coerceIn(70, 95)
-                // Penalise candidates that needed replacements (e.g. ISO-8859-6 gaps).
+            // Pick the Arabic codepage whenever there are a few *clustered* Arabic
+            // letters — even in a mostly-English file. Decoding as an Arabic
+            // codepage leaves ASCII untouched, so it only ever fixes the Arabic
+            // and never harms the English. This is what lets files open correctly
+            // without ever asking the user to choose.
+            if (s.arabic >= 4 && clustered >= 0.6) {
+                val confidence = (78 + clustered * 18).toInt().coerceIn(78, 96)
+                // Among Arabic codepages, prefer the one with the fewest decode
+                // gaps (e.g. windows-1256 over ISO-8859-6 when both fit).
                 val cleanest = scans
                     .filter { it.first in arabicCandidates && it.second.arabic >= s.arabic * 0.9 }
                     .minByOrNull { it.second.replacement }!!
