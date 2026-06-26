@@ -78,6 +78,8 @@ fun EditorArea(
         TextStyle(
             fontFamily = editorFont,
             fontSize = fontSizeSp.sp,
+            // Comfortable line spacing so lines are clearly separated and readable.
+            lineHeight = (fontSizeSp * 1.6f).sp,
             color = MaterialTheme.colorScheme.onSurface,
             textDirection = TextDirection.Content,
         )

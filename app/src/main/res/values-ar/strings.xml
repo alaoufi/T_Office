@@ -25,6 +25,14 @@
     <string name="action_next">التالي</string>
     <string name="action_previous">السابق</string>
     <string name="action_go">انتقال</string>
+    <string name="action_close_document">إغلاق المستند</string>
+    <string name="format_bold">عريض</string>
+    <string name="format_italic">مائل</string>
+    <string name="format_heading">عنوان</string>
+    <string name="format_list">قائمة نقطية</string>
+    <string name="format_quote">اقتباس</string>
+    <string name="format_uppercase">أحرف كبيرة</string>
+    <string name="format_lowercase">أحرف صغيرة</string>
 
     <!-- Editor / status -->
     <string name="untitled">بدون عنوان</string>

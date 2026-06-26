@@ -374,6 +374,61 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         refreshStats(tab)
     }
 
+    // -------------------------------------------------------- text formatting
+
+    /** Wrap the current selection (or insert at caret) with [prefix]/[suffix]. */
+    fun wrapSelection(prefix: String, suffix: String) {
+        val tab = active ?: return
+        if (tab.doc.loadMode == LoadMode.READONLY_LARGE) return
+        val f = tab.field
+        val start = minOf(f.selection.start, f.selection.end)
+        val end = maxOf(f.selection.start, f.selection.end)
+        val text = f.text
+        val selected = text.substring(start, end)
+        val newText = text.substring(0, start) + prefix + selected + suffix + text.substring(end)
+        val caret = if (start == end) start + prefix.length else end + prefix.length + suffix.length
+        tab.pushUndo(f)
+        tab.field = TextFieldValue(newText, selection = androidx.compose.ui.text.TextRange(caret))
+        refreshStats(tab)
+    }
+
+    /** Add [prefix] to the start of every line touched by the selection. */
+    fun prefixLines(prefix: String) {
+        val tab = active ?: return
+        if (tab.doc.loadMode == LoadMode.READONLY_LARGE) return
+        val f = tab.field
+        val text = f.text
+        val selStart = minOf(f.selection.start, f.selection.end)
+        val selEnd = maxOf(f.selection.start, f.selection.end)
+        val lineStart = text.lastIndexOf('\n', (selStart - 1).coerceAtLeast(0)).let { if (it == -1) 0 else it + 1 }
+        val lineEnd = text.indexOf('\n', selEnd).let { if (it == -1) text.length else it }
+        val block = text.substring(lineStart, lineEnd)
+        val newBlock = block.split('\n').joinToString("\n") { prefix + it }
+        val newText = text.substring(0, lineStart) + newBlock + text.substring(lineEnd)
+        tab.pushUndo(f)
+        tab.field = TextFieldValue(
+            newText,
+            selection = androidx.compose.ui.text.TextRange(lineStart, lineStart + newBlock.length),
+        )
+        refreshStats(tab)
+    }
+
+    /** Change the case of the selected text. */
+    fun transformSelection(transform: (String) -> String) {
+        val tab = active ?: return
+        if (tab.doc.loadMode == LoadMode.READONLY_LARGE) return
+        val f = tab.field
+        val start = minOf(f.selection.start, f.selection.end)
+        val end = maxOf(f.selection.start, f.selection.end)
+        if (start == end) return
+        val text = f.text
+        val replaced = transform(text.substring(start, end))
+        val newText = text.substring(0, start) + replaced + text.substring(end)
+        tab.pushUndo(f)
+        tab.field = TextFieldValue(newText, selection = androidx.compose.ui.text.TextRange(start, start + replaced.length))
+        refreshStats(tab)
+    }
+
     fun undo() {
         val tab = active ?: return
         tab.undo()?.let { tab.field = it; refreshStats(tab) }

@@ -25,6 +25,14 @@
     <string name="action_next">Next</string>
     <string name="action_previous">Previous</string>
     <string name="action_go">Go</string>
+    <string name="action_close_document">Close document</string>
+    <string name="format_bold">Bold</string>
+    <string name="format_italic">Italic</string>
+    <string name="format_heading">Heading</string>
+    <string name="format_list">Bulleted list</string>
+    <string name="format_quote">Quote</string>
+    <string name="format_uppercase">UPPERCASE</string>
+    <string name="format_lowercase">lowercase</string>
 
     <!-- Editor / status -->
     <string name="untitled">Untitled</string>

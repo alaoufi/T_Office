@@ -7,26 +7,37 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContract
 import androidx.activity.result.contract.ActivityResultContracts
-import com.uts.editor.data.FileIo
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.FormatBold
+import androidx.compose.material.icons.filled.FormatItalic
+import androidx.compose.material.icons.filled.FormatListBulleted
+import androidx.compose.material.icons.filled.FormatQuote
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Redo
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Title
+import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -41,6 +52,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -49,16 +61,20 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.uts.editor.R
+import com.uts.editor.data.AppLanguage
 import com.uts.editor.data.AppSettings
 import com.uts.editor.model.LoadMode
-import com.uts.editor.model.TextEncoding
 import com.uts.editor.ui.theme.syntaxColorsFor
+import com.uts.editor.util.LocaleManager
 import com.uts.editor.util.PdfExporter
 import com.uts.editor.util.PrintHelper
 import com.uts.editor.util.ShareHelper
@@ -80,9 +96,7 @@ fun AppRoot(
     var menuOpen by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var showGoto by remember { mutableStateOf(false) }
-    var showSaveEncoding by remember { mutableStateOf(false) }
     var pendingClose by remember { mutableStateOf<Int?>(null) }
-    var pendingSaveEncoding by remember { mutableStateOf<TextEncoding?>(null) }
     var showSaveName by remember { mutableStateOf(false) }
 
     val pickSaveFolderLauncher = rememberLauncherForActivityResult(
@@ -95,7 +109,7 @@ fun AppRoot(
 
     val saveAsLauncher = rememberLauncherForActivityResult(
         remember { CreateTextDocument() }
-    ) { uri -> uri?.let { viewModel.saveAs(it, pendingSaveEncoding) } }
+    ) { uri -> uri?.let { viewModel.saveAs(it) } }
 
     val exportPdfLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/pdf")
@@ -111,11 +125,15 @@ fun AppRoot(
         }
     }
 
-    // Save flow for an unsaved document: use the default folder if one is set,
-    // otherwise fall back to the system "create document" picker.
+    // Save an unsaved document: use the default folder if one is set, else the picker.
     val startNewSave: () -> Unit = {
         if (settings.saveFolderUri != null) showSaveName = true
-        else { pendingSaveEncoding = null; saveAsLauncher.launch(viewModel.active?.doc?.displayName ?: "untitled.txt") }
+        else saveAsLauncher.launch(viewModel.active?.doc?.displayName ?: "untitled.txt")
+    }
+    val onSave: () -> Unit = { viewModel.save(onNeedSaveAs = startNewSave) }
+    val onCloseActive: () -> Unit = {
+        val idx = viewModel.activeIndex
+        if (!viewModel.requestCloseTab(idx)) pendingClose = idx
     }
 
     LaunchedEffect(Unit) {
@@ -126,222 +144,282 @@ fun AppRoot(
     val dark = isDark(settings)
     val syntaxColors = remember(dark) { syntaxColorsFor(dark) }
 
-    Scaffold(
-        snackbarHost = { SnackbarHost(snackbar) },
-        topBar = {
-            TopAppBar(
-                title = {
-                    val title = active?.doc?.displayName ?: stringResource(R.string.app_name)
-                    val modified = active?.isModified() == true
-                    Text(
-                        text = if (modified) "• $title" else title,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                },
-                actions = {
-                    IconButton(onClick = { viewModel.newDocument() }) {
-                        Icon(Icons.Filled.Add, stringResource(R.string.action_new))
-                    }
-                    IconButton(onClick = {
-                        viewModel.save(onNeedSaveAs = startNewSave)
-                    }) { Icon(Icons.Filled.Save, stringResource(R.string.action_save)) }
-                    IconButton(onClick = { menuOpen = true }) {
-                        Icon(Icons.Filled.MoreVert, stringResource(R.string.action_menu))
-                    }
-                    OverflowMenu(
-                        expanded = menuOpen,
-                        onDismiss = { menuOpen = false },
-                        onOpen = { menuOpen = false; openLauncher.launch(arrayOf("*/*")) },
-                        onSaveAs = {
-                            menuOpen = false; pendingSaveEncoding = null
-                            saveAsLauncher.launch(active?.doc?.displayName ?: "untitled.txt")
-                        },
-                        onFind = { menuOpen = false; viewModel.showFind(true) },
-                        onGoto = { menuOpen = false; showGoto = true },
-                        onShare = {
-                            menuOpen = false
-                            active?.let { ShareHelper.shareText(context, it.doc.displayName, it.field.text) }
-                        },
-                        onExportPdf = {
-                            menuOpen = false
-                            exportPdfLauncher.launch((active?.doc?.displayName ?: "document") + ".pdf")
-                        },
-                        onPrint = {
-                            menuOpen = false
-                            active?.let { PrintHelper.print(context, it.doc.displayName, it.field.text) }
-                        },
-                        onReopenEncoding = { menuOpen = false; viewModel.reopenActiveWithEncoding() },
-                        onSaveEncoding = { menuOpen = false; showSaveEncoding = true },
-                        onSettings = { menuOpen = false; showSettings = true },
-                    )
-                },
-            )
-        },
-        bottomBar = { active?.let { StatusBar(it) } },
-    ) { padding ->
-        Column(
-            Modifier
-                .fillMaxSize()
-                .padding(padding)
-        ) {
-            if (viewModel.isBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
-            TabStrip(
-                tabs = viewModel.tabs,
-                activeIndex = viewModel.activeIndex,
-                onSelect = { viewModel.switchTo(it) },
-                onClose = { idx ->
-                    if (!viewModel.requestCloseTab(idx)) pendingClose = idx
-                },
-            )
-            if (viewModel.findState.visible) {
-                FindReplaceBar(
-                    state = viewModel.findState,
-                    readOnly = active?.doc?.loadMode == LoadMode.READONLY_LARGE,
-                    onQueryChange = { viewModel.updateFind(query = it) },
-                    onReplacementChange = { viewModel.updateFind(replacement = it) },
-                    onToggleRegex = { viewModel.updateFind(regex = it) },
-                    onToggleCase = { viewModel.updateFind(matchCase = it) },
-                    onToggleWord = { viewModel.updateFind(wholeWord = it) },
-                    onNext = { viewModel.findNext() },
-                    onPrevious = { viewModel.findPrevious() },
-                    onReplace = { viewModel.replaceCurrent() },
-                    onReplaceAll = { viewModel.replaceAll() },
-                    onClose = { viewModel.showFind(false) },
-                )
-            }
-            if (active != null) {
-                val readOnly = active.doc.loadMode == LoadMode.READONLY_LARGE
-                Box(Modifier.fillMaxSize()) {
-                    EditorArea(
-                        value = active.field,
-                        onValueChange = { viewModel.onTextChange(it) },
-                        language = active.doc.language,
-                        syntaxEnabled = settings.syntaxEnabled,
-                        syntaxColors = syntaxColors,
-                        fontSizeSp = settings.fontSizeSp,
-                        showLineNumbers = settings.lineNumbers,
-                        wordWrap = settings.wordWrap,
-                        readOnly = readOnly,
-                        matches = viewModel.findState.matches,
-                        currentMatch = viewModel.findState.current,
-                        modifier = Modifier.padding(4.dp),
-                    )
-                    if (readOnly) {
-                        LargeFileControls(
-                            onPrev = { viewModel.loadPreviousLargePage() },
-                            onNext = { viewModel.loadNextLargePage() },
-                            modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp),
+    // Lay the whole UI out RTL for Arabic / LTR for English (System follows device).
+    val layoutDir = when (LocaleManager.storedLanguage(context)) {
+        AppLanguage.ARABIC -> LayoutDirection.Rtl
+        AppLanguage.ENGLISH -> LayoutDirection.Ltr
+        AppLanguage.SYSTEM -> LocalLayoutDirection.current
+    }
+
+    CompositionLocalProvider(LocalLayoutDirection provides layoutDir) {
+        Scaffold(
+            snackbarHost = { SnackbarHost(snackbar) },
+            topBar = {
+                TopAppBar(
+                    // Menu sits at the "start" — the right side in Arabic (RTL).
+                    navigationIcon = {
+                        IconButton(onClick = { menuOpen = true }) {
+                            Icon(Icons.Filled.MoreVert, stringResource(R.string.action_menu))
+                        }
+                        OverflowMenu(
+                            expanded = menuOpen,
+                            onDismiss = { menuOpen = false },
+                            onOpen = { menuOpen = false; openLauncher.launch(arrayOf("*/*")) },
+                            onSaveAs = { menuOpen = false; saveAsLauncher.launch(active?.doc?.displayName ?: "untitled.txt") },
+                            onGoto = { menuOpen = false; showGoto = true },
+                            onShare = {
+                                menuOpen = false
+                                active?.let { ShareHelper.shareText(context, it.doc.displayName, it.field.text) }
+                            },
+                            onExportPdf = {
+                                menuOpen = false
+                                exportPdfLauncher.launch((active?.doc?.displayName ?: "document") + ".pdf")
+                            },
+                            onPrint = {
+                                menuOpen = false
+                                active?.let { PrintHelper.print(context, it.doc.displayName, it.field.text) }
+                            },
+                            onSettings = { menuOpen = false; showSettings = true },
                         )
+                    },
+                    title = {
+                        val title = active?.doc?.displayName ?: stringResource(R.string.app_name)
+                        val modified = active?.isModified() == true
+                        Text(
+                            text = if (modified) "• $title" else title,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    },
+                )
+            },
+            bottomBar = { active?.let { StatusBar(it) } },
+        ) { padding ->
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+            ) {
+                if (viewModel.isBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
+
+                val readOnly = active?.doc?.loadMode == LoadMode.READONLY_LARGE
+                EditorToolbar(
+                    enabled = active != null && !readOnly,
+                    onNew = { viewModel.newDocument() },
+                    onSave = onSave,
+                    onClose = onCloseActive,
+                    onUndo = { viewModel.undo() },
+                    onRedo = { viewModel.redo() },
+                    onFind = { viewModel.showFind(true) },
+                    onBold = { viewModel.wrapSelection("**", "**") },
+                    onItalic = { viewModel.wrapSelection("*", "*") },
+                    onHeading = { viewModel.prefixLines("# ") },
+                    onList = { viewModel.prefixLines("- ") },
+                    onQuote = { viewModel.prefixLines("> ") },
+                )
+
+                TabStrip(
+                    tabs = viewModel.tabs,
+                    activeIndex = viewModel.activeIndex,
+                    onSelect = { viewModel.switchTo(it) },
+                    onClose = { idx -> if (!viewModel.requestCloseTab(idx)) pendingClose = idx },
+                )
+
+                if (viewModel.findState.visible) {
+                    FindReplaceBar(
+                        state = viewModel.findState,
+                        readOnly = readOnly,
+                        onQueryChange = { viewModel.updateFind(query = it) },
+                        onReplacementChange = { viewModel.updateFind(replacement = it) },
+                        onToggleRegex = { viewModel.updateFind(regex = it) },
+                        onToggleCase = { viewModel.updateFind(matchCase = it) },
+                        onToggleWord = { viewModel.updateFind(wholeWord = it) },
+                        onNext = { viewModel.findNext() },
+                        onPrevious = { viewModel.findPrevious() },
+                        onReplace = { viewModel.replaceCurrent() },
+                        onReplaceAll = { viewModel.replaceAll() },
+                        onClose = { viewModel.showFind(false) },
+                    )
+                }
+
+                if (active != null) {
+                    Box(Modifier.fillMaxSize()) {
+                        EditorArea(
+                            value = active.field,
+                            onValueChange = { viewModel.onTextChange(it) },
+                            language = active.doc.language,
+                            syntaxEnabled = settings.syntaxEnabled,
+                            syntaxColors = syntaxColors,
+                            fontSizeSp = settings.fontSizeSp,
+                            showLineNumbers = settings.lineNumbers,
+                            wordWrap = settings.wordWrap,
+                            readOnly = readOnly,
+                            matches = viewModel.findState.matches,
+                            currentMatch = viewModel.findState.current,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+                        )
+                        if (readOnly) {
+                            LargeFileControls(
+                                onPrev = { viewModel.loadPreviousLargePage() },
+                                onNext = { viewModel.loadNextLargePage() },
+                                modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp),
+                            )
+                        }
                     }
                 }
             }
         }
-    }
 
-    // ---- Dialogs ----
+        // ---- Dialogs ----
 
-    viewModel.encodingPrompt?.let { prompt ->
-        EncodingDialog(
-            prompt = prompt,
-            onPreview = { sample, enc -> viewModel.previewDecode(sample, enc) },
-            onConfirm = { viewModel.confirmEncoding(it) },
-            onDismiss = { viewModel.cancelEncodingPrompt() },
-        )
-    }
-
-    viewModel.zipPrompt?.let { zip ->
-        ZipPickerDialog(
-            entries = zip.entries,
-            onPick = { viewModel.openZipEntry(it) },
-            onDismiss = { viewModel.dismissZipPrompt() },
-        )
-    }
-
-    viewModel.binaryPrompt?.let { bin ->
-        BinaryFileDialog(
-            name = bin.displayName,
-            onOpenAnyway = { viewModel.openBinaryAnyway() },
-            onCancel = { viewModel.cancelBinaryPrompt() },
-        )
-    }
-
-    if (showGoto && active != null) {
-        GotoLineDialog(
-            maxLine = active.doc.stats.lines,
-            onGo = { viewModel.gotoLine(it); showGoto = false },
-            onDismiss = { showGoto = false },
-        )
-    }
-
-    if (showSaveEncoding && active != null) {
-        SaveEncodingDialog(
-            current = active.doc.encoding,
-            onConfirm = { enc ->
-                showSaveEncoding = false
-                if (active.doc.uri != null) viewModel.saveWithEncoding(enc)
-                else { pendingSaveEncoding = enc; saveAsLauncher.launch(active.doc.displayName) }
-            },
-            onDismiss = { showSaveEncoding = false },
-        )
-    }
-
-    if (showSaveName && active != null) {
-        FileNameDialog(
-            initial = active.doc.displayName,
-            folderName = settings.saveFolderName,
-            onConfirm = { name ->
-                showSaveName = false
-                viewModel.saveNewToDefaultFolder(name, onFallback = {
-                    pendingSaveEncoding = null; saveAsLauncher.launch(name)
-                })
-            },
-            onDismiss = { showSaveName = false },
-        )
-    }
-
-    pendingClose?.let { idx ->
-        val tab = viewModel.tabs.getOrNull(idx)
-        if (tab != null) {
-            DiscardDialog(
-                name = tab.doc.displayName,
-                onSave = {
-                    pendingClose = null
-                    viewModel.switchTo(idx)
-                    viewModel.save(onNeedSaveAs = {
-                        pendingSaveEncoding = null; saveAsLauncher.launch(tab.doc.displayName)
-                    })
-                },
-                onDiscard = { pendingClose = null; viewModel.closeTab(idx) },
-                onCancel = { pendingClose = null },
+        viewModel.encodingPrompt?.let { prompt ->
+            EncodingDialog(
+                prompt = prompt,
+                onPreview = { sample, enc -> viewModel.previewDecode(sample, enc) },
+                onConfirm = { viewModel.confirmEncoding(it) },
+                onDismiss = { viewModel.cancelEncodingPrompt() },
             )
-        } else pendingClose = null
-    }
+        }
 
-    if (viewModel.recoverableDrafts.isNotEmpty()) {
-        RecoveryDialog(
-            count = viewModel.recoverableDrafts.size,
-            name = viewModel.recoverableDrafts.first().displayName,
-            onRestore = { viewModel.restoreDrafts() },
-            onDiscard = { viewModel.discardDrafts() },
-        )
-    }
+        viewModel.zipPrompt?.let { zip ->
+            ZipPickerDialog(
+                entries = zip.entries,
+                onPick = { viewModel.openZipEntry(it) },
+                onDismiss = { viewModel.dismissZipPrompt() },
+            )
+        }
 
-    if (showSettings) {
-        SettingsSheet(
-            settings = settings,
-            onTheme = { scope.launch { viewModel.settingsStore.setTheme(it) } },
-            onFontSize = { scope.launch { viewModel.settingsStore.setFontSize(it) } },
-            onAutosave = { scope.launch { viewModel.settingsStore.setAutosave(it) } },
-            onSyntax = { scope.launch { viewModel.settingsStore.setSyntax(it) } },
-            onLineNumbers = { scope.launch { viewModel.settingsStore.setLineNumbers(it) } },
-            onWordWrap = { scope.launch { viewModel.settingsStore.setWordWrap(it) } },
-            onLanguageApplied = onLanguageApplied,
-            onPickSaveFolder = { pickSaveFolderLauncher.launch(null) },
-            onClearSaveFolder = { viewModel.clearSaveFolder() },
-            onDismiss = { showSettings = false },
-        )
+        viewModel.binaryPrompt?.let { bin ->
+            BinaryFileDialog(
+                name = bin.displayName,
+                onOpenAnyway = { viewModel.openBinaryAnyway() },
+                onCancel = { viewModel.cancelBinaryPrompt() },
+            )
+        }
+
+        if (showGoto && active != null) {
+            GotoLineDialog(
+                maxLine = active.doc.stats.lines,
+                onGo = { viewModel.gotoLine(it); showGoto = false },
+                onDismiss = { showGoto = false },
+            )
+        }
+
+        if (showSaveName && active != null) {
+            FileNameDialog(
+                initial = active.doc.displayName,
+                folderName = settings.saveFolderName,
+                onConfirm = { name ->
+                    showSaveName = false
+                    viewModel.saveNewToDefaultFolder(name, onFallback = { saveAsLauncher.launch(name) })
+                },
+                onDismiss = { showSaveName = false },
+            )
+        }
+
+        pendingClose?.let { idx ->
+            val tab = viewModel.tabs.getOrNull(idx)
+            if (tab != null) {
+                DiscardDialog(
+                    name = tab.doc.displayName,
+                    onSave = {
+                        pendingClose = null
+                        viewModel.switchTo(idx)
+                        viewModel.save(onNeedSaveAs = { saveAsLauncher.launch(tab.doc.displayName) })
+                    },
+                    onDiscard = { pendingClose = null; viewModel.closeTab(idx) },
+                    onCancel = { pendingClose = null },
+                )
+            } else pendingClose = null
+        }
+
+        if (viewModel.recoverableDrafts.isNotEmpty()) {
+            RecoveryDialog(
+                count = viewModel.recoverableDrafts.size,
+                name = viewModel.recoverableDrafts.first().displayName,
+                onRestore = { viewModel.restoreDrafts() },
+                onDiscard = { viewModel.discardDrafts() },
+            )
+        }
+
+        if (showSettings) {
+            SettingsSheet(
+                settings = settings,
+                onTheme = { scope.launch { viewModel.settingsStore.setTheme(it) } },
+                onFontSize = { scope.launch { viewModel.settingsStore.setFontSize(it) } },
+                onAutosave = { scope.launch { viewModel.settingsStore.setAutosave(it) } },
+                onSyntax = { scope.launch { viewModel.settingsStore.setSyntax(it) } },
+                onLineNumbers = { scope.launch { viewModel.settingsStore.setLineNumbers(it) } },
+                onWordWrap = { scope.launch { viewModel.settingsStore.setWordWrap(it) } },
+                onLanguageApplied = onLanguageApplied,
+                onPickSaveFolder = { pickSaveFolderLauncher.launch(null) },
+                onClearSaveFolder = { viewModel.clearSaveFolder() },
+                onDismiss = { showSettings = false },
+            )
+        }
     }
+}
+
+@Composable
+private fun EditorToolbar(
+    enabled: Boolean,
+    onNew: () -> Unit,
+    onSave: () -> Unit,
+    onClose: () -> Unit,
+    onUndo: () -> Unit,
+    onRedo: () -> Unit,
+    onFind: () -> Unit,
+    onBold: () -> Unit,
+    onItalic: () -> Unit,
+    onHeading: () -> Unit,
+    onList: () -> Unit,
+    onQuote: () -> Unit,
+) {
+    Surface(tonalElevation = 2.dp, color = MaterialTheme.colorScheme.surface) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 4.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ToolButton(Icons.Filled.Add, R.string.action_new, onClick = onNew)
+            ToolButton(Icons.Filled.Save, R.string.action_save, enabled = enabled, onClick = onSave)
+            ToolButton(Icons.Filled.Close, R.string.action_close_document, onClick = onClose)
+            ToolDivider()
+            ToolButton(Icons.Filled.Undo, R.string.action_undo, enabled = enabled, onClick = onUndo)
+            ToolButton(Icons.Filled.Redo, R.string.action_redo, enabled = enabled, onClick = onRedo)
+            ToolButton(Icons.Filled.Search, R.string.action_find, onClick = onFind)
+            ToolDivider()
+            ToolButton(Icons.Filled.FormatBold, R.string.format_bold, enabled = enabled, onClick = onBold)
+            ToolButton(Icons.Filled.FormatItalic, R.string.format_italic, enabled = enabled, onClick = onItalic)
+            ToolButton(Icons.Filled.Title, R.string.format_heading, enabled = enabled, onClick = onHeading)
+            ToolButton(Icons.Filled.FormatListBulleted, R.string.format_list, enabled = enabled, onClick = onList)
+            ToolButton(Icons.Filled.FormatQuote, R.string.format_quote, enabled = enabled, onClick = onQuote)
+        }
+    }
+}
+
+@Composable
+private fun ToolButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    descRes: Int,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    IconButton(onClick = onClick, enabled = enabled) {
+        Icon(icon, contentDescription = stringResource(descRes))
+    }
+}
+
+@Composable
+private fun ToolDivider() {
+    Spacer(Modifier.width(4.dp))
+    Surface(
+        color = MaterialTheme.colorScheme.outlineVariant,
+        modifier = Modifier.width(1.dp).height(24.dp),
+    ) {}
+    Spacer(Modifier.width(4.dp))
 }
 
 @Composable
@@ -350,22 +428,16 @@ private fun OverflowMenu(
     onDismiss: () -> Unit,
     onOpen: () -> Unit,
     onSaveAs: () -> Unit,
-    onFind: () -> Unit,
     onGoto: () -> Unit,
     onShare: () -> Unit,
     onExportPdf: () -> Unit,
     onPrint: () -> Unit,
-    onReopenEncoding: () -> Unit,
-    onSaveEncoding: () -> Unit,
     onSettings: () -> Unit,
 ) {
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
         DropdownMenuItem(text = { Text(stringResource(R.string.action_open)) }, onClick = onOpen)
         DropdownMenuItem(text = { Text(stringResource(R.string.action_save_as)) }, onClick = onSaveAs)
-        DropdownMenuItem(text = { Text(stringResource(R.string.action_find)) }, onClick = onFind)
         DropdownMenuItem(text = { Text(stringResource(R.string.action_goto_line)) }, onClick = onGoto)
-        DropdownMenuItem(text = { Text(stringResource(R.string.encoding_reopen_with)) }, onClick = onReopenEncoding)
-        DropdownMenuItem(text = { Text(stringResource(R.string.encoding_save_with)) }, onClick = onSaveEncoding)
         DropdownMenuItem(text = { Text(stringResource(R.string.action_share)) }, onClick = onShare)
         DropdownMenuItem(text = { Text(stringResource(R.string.action_export_pdf)) }, onClick = onExportPdf)
         DropdownMenuItem(text = { Text(stringResource(R.string.action_print)) }, onClick = onPrint)
@@ -385,7 +457,7 @@ private fun TabStrip(
         Modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 4.dp, vertical = 4.dp),
+            .padding(horizontal = 6.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         tabs.forEachIndexed { index, tab ->
@@ -393,19 +465,19 @@ private fun TabStrip(
             Surface(
                 color = if (selected) MaterialTheme.colorScheme.primaryContainer
                 else MaterialTheme.colorScheme.surfaceVariant,
-                shape = RoundedCornerShape(8.dp),
+                shape = RoundedCornerShape(10.dp),
                 modifier = Modifier.clickable { onSelect(index) },
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 10.dp, end = 2.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 12.dp, end = 2.dp)) {
                     Text(
                         text = (if (tab.isModified()) "• " else "") + tab.doc.displayName,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         style = MaterialTheme.typography.labelLarge,
-                        modifier = Modifier.padding(vertical = 6.dp),
+                        modifier = Modifier.padding(vertical = 8.dp),
                     )
-                    IconButton(onClick = { onClose(index) }, modifier = Modifier.padding(0.dp)) {
-                        Icon(Icons.Filled.Close, stringResource(R.string.tab_close))
+                    IconButton(onClick = { onClose(index) }, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Filled.Close, stringResource(R.string.tab_close), modifier = Modifier.size(16.dp))
                     }
                 }
             }
@@ -431,7 +503,6 @@ private fun StatusBar(tab: EditorTab) {
             StatusItem(stringResource(R.string.status_words, s.words))
             StatusItem(stringResource(R.string.status_chars, s.chars))
             StatusItem(stringResource(R.string.status_size, EditorViewModel.humanSize(s.sizeBytes)))
-            StatusItem(stringResource(R.string.status_encoding, tab.doc.encoding.displayName))
         }
     }
 }
@@ -463,7 +534,7 @@ private fun LargeFileControls(onPrev: () -> Unit, onNext: () -> Unit, modifier: 
 private fun isDark(settings: AppSettings): Boolean = when (settings.theme) {
     com.uts.editor.data.ThemeMode.DARK -> true
     com.uts.editor.data.ThemeMode.LIGHT -> false
-    com.uts.editor.data.ThemeMode.SYSTEM -> false // refined by system in theme; status colors only
+    com.uts.editor.data.ThemeMode.SYSTEM -> false
 }
 
 /**
@@ -475,7 +546,7 @@ private class CreateTextDocument : ActivityResultContract<String, Uri?>() {
     override fun createIntent(context: Context, input: String): Intent =
         Intent(Intent.ACTION_CREATE_DOCUMENT)
             .addCategory(Intent.CATEGORY_OPENABLE)
-            .setType(FileIo.mimeForName(input))
+            .setType(com.uts.editor.data.FileIo.mimeForName(input))
             .putExtra(Intent.EXTRA_TITLE, input)
 
     override fun parseResult(resultCode: Int, intent: Intent?): Uri? =
