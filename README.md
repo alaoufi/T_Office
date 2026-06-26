@@ -13,7 +13,7 @@ any world encoding.
 
 ## Download / التحميل
 
-Pre-built signed APK: [`dist/GlobalTextEditor-v1.3-release.apk`](dist/GlobalTextEditor-v1.3-release.apk) (~1.4 MB).
+Pre-built signed APK: [`dist/GlobalTextEditor-v1.4-release.apk`](dist/GlobalTextEditor-v1.4-release.apk) (~1.4 MB).
 
 > The release is signed with the self-signed key in `release.keystore` (dev key).
 > **Replace it with your own keystore before publishing to Google Play.**

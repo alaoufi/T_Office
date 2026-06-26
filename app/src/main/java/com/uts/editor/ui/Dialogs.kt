@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -207,6 +208,39 @@ fun ZipPickerDialog(
                         }
                     }
                 }
+            }
+        },
+    )
+}
+
+@Composable
+fun AboutDialog(onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_ok)) } },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                androidx.compose.foundation.Image(
+                    painter = androidx.compose.ui.res.painterResource(R.drawable.ic_logo),
+                    contentDescription = null,
+                    modifier = Modifier.padding(8.dp).size(96.dp),
+                )
+                Text(
+                    stringResource(R.string.app_name),
+                    style = MaterialTheme.typography.titleLarge,
+                )
+                Text(
+                    "v${com.uts.editor.BuildConfig.VERSION_NAME}",
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
+                Text(
+                    stringResource(R.string.about_text),
+                    style = MaterialTheme.typography.bodySmall,
+                )
             }
         },
     )

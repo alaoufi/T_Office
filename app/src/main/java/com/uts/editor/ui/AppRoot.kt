@@ -8,6 +8,7 @@ import android.speech.RecognizerIntent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContract
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -70,6 +71,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -105,6 +107,7 @@ fun AppRoot(
     var showGoto by remember { mutableStateOf(false) }
     var pendingClose by remember { mutableStateOf<Int?>(null) }
     var showSaveName by remember { mutableStateOf(false) }
+    var showAbout by remember { mutableStateOf(false) }
 
     val pickSaveFolderLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
@@ -222,6 +225,7 @@ fun AppRoot(
                     enabled = active != null && !readOnly,
                     fileName = active?.doc?.displayName ?: stringResource(R.string.app_name),
                     modified = active?.isModified() == true,
+                    onLogoClick = { showAbout = true },
                     menuOpen = menuOpen,
                     onMenuOpen = { menuOpen = true },
                     onMenuDismiss = { menuOpen = false },
@@ -385,6 +389,10 @@ fun AppRoot(
             )
         }
 
+        if (showAbout) {
+            AboutDialog(onDismiss = { showAbout = false })
+        }
+
         if (showSettings) {
             SettingsSheet(
                 settings = settings,
@@ -410,6 +418,7 @@ private fun CompactToolbar(
     enabled: Boolean,
     fileName: String,
     modified: Boolean,
+    onLogoClick: () -> Unit,
     menuOpen: Boolean,
     onMenuOpen: () -> Unit,
     onMenuDismiss: () -> Unit,
@@ -445,6 +454,15 @@ private fun CompactToolbar(
             Modifier.fillMaxWidth().padding(horizontal = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            // App logo (pinned). Tap to open the About dialog (enlarged icon).
+            Image(
+                painter = painterResource(R.drawable.ic_logo),
+                contentDescription = stringResource(R.string.settings_about),
+                modifier = Modifier
+                    .padding(horizontal = 4.dp)
+                    .size(30.dp)
+                    .clickable { onLogoClick() },
+            )
             // Pinned overflow menu (does not scroll with the tools).
             Box {
                 ToolButton(Icons.Filled.MoreVert, R.string.action_menu, onClick = onMenuOpen)
