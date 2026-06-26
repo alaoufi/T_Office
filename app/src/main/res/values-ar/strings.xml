@@ -10,6 +10,8 @@
     <string name="action_open_zip">فتح من ملف مضغوط</string>
     <string name="action_share">مشاركة</string>
     <string name="action_export_pdf">تصدير إلى PDF</string>
+    <string name="action_export_html">تصدير إلى HTML (يحفظ التنسيق)</string>
+    <string name="format_clear">مسح التنسيق</string>
     <string name="action_print">طباعة</string>
     <string name="action_find">بحث واستبدال</string>
     <string name="action_goto_line">الانتقال إلى سطر</string>

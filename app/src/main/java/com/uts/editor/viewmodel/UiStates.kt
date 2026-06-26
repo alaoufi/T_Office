@@ -54,6 +54,22 @@ data class FindState(
 data class UiMessage(val text: String)
 
 /**
+ * A character-range rich-text override. Each span carries one (or more)
+ * attributes; spans layer on top of each other (later wins per attribute).
+ * Display-only for .txt; persisted when the document is exported to HTML.
+ */
+data class RichSpan(
+    val start: Int,
+    val end: Int,
+    val bold: Boolean = false,
+    val italic: Boolean = false,
+    val underline: Boolean = false,
+    val color: Int? = null,
+    val bg: Int? = null,
+    val sizeSp: Float? = null,
+)
+
+/**
  * One open document. Editable content lives in Compose state ([field]) so
  * keystrokes don't churn ViewModel-wide state. Undo/redo are snapshot based.
  */
@@ -77,6 +93,9 @@ class EditorTab(initialDoc: DocumentState, initialField: TextFieldValue) {
 
     /** Per-paragraph line-spacing multiplier (line index -> multiplier). Display-only. */
     val lineSpacings = androidx.compose.runtime.mutableStateMapOf<Int, Float>()
+
+    /** Character-range rich-text formatting (bold/italic/color/size/bg). */
+    val spans = androidx.compose.runtime.mutableStateListOf<RichSpan>()
 
     private val undoStack = ArrayDeque<TextFieldValue>()
     private val redoStack = ArrayDeque<TextFieldValue>()

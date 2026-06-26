@@ -30,6 +30,9 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
@@ -62,6 +65,7 @@ fun EditorArea(
     currentMatch: Int,
     lineAligns: Map<Int, Int> = emptyMap(),
     lineSpacings: Map<Int, Float> = emptyMap(),
+    spans: List<com.uts.editor.viewmodel.RichSpan> = emptyList(),
     defaultSpacing: Float = 1.6f,
     textColorOverride: Int? = null,
     bgColorOverride: Int? = null,
@@ -104,7 +108,7 @@ fun EditorArea(
 
     val transformation = remember(
         language, syntaxEnabled, syntaxColors, matches, currentMatch,
-        lineAligns, lineSpacings, lineStarts, defaultSpacing, fontSizeSp, tileParagraphs,
+        lineAligns, lineSpacings, spans, lineStarts, defaultSpacing, fontSizeSp, tileParagraphs,
     ) {
         VisualTransformation { input ->
             val annotated = if (syntaxEnabled) {
@@ -131,6 +135,23 @@ fun EditorArea(
                         val mult = lineSpacings[i] ?: defaultSpacing
                         addStyle(ParagraphStyle(textAlign = ta, lineHeight = (fontSizeSp * mult).sp), start, end)
                     }
+                }
+                // Rich character formatting (bold/italic/color/size/highlight).
+                for (sp in spans) {
+                    val st = sp.start.coerceIn(0, len)
+                    val en = sp.end.coerceIn(st, len)
+                    if (st >= en) continue
+                    addStyle(
+                        SpanStyle(
+                            fontWeight = if (sp.bold) FontWeight.Bold else null,
+                            fontStyle = if (sp.italic) FontStyle.Italic else null,
+                            textDecoration = if (sp.underline) TextDecoration.Underline else null,
+                            color = sp.color?.let { Color(it) } ?: Color.Unspecified,
+                            background = sp.bg?.let { Color(it) } ?: Color.Unspecified,
+                            fontSize = sp.sizeSp?.sp ?: androidx.compose.ui.unit.TextUnit.Unspecified,
+                        ),
+                        st, en,
+                    )
                 }
                 matches.forEachIndexed { i, r ->
                     val bg = if (i == currentMatch) currentBg else matchBg

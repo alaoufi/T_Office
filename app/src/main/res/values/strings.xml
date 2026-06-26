@@ -10,6 +10,8 @@
     <string name="action_open_zip">Open from ZIP</string>
     <string name="action_share">Share</string>
     <string name="action_export_pdf">Export to PDF</string>
+    <string name="action_export_html">Export to HTML (keeps formatting)</string>
+    <string name="format_clear">Clear formatting</string>
     <string name="action_print">Print</string>
     <string name="action_find">Find &amp; Replace</string>
     <string name="action_goto_line">Go to line</string>

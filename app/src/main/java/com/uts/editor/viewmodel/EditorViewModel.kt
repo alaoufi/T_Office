@@ -369,9 +369,79 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         if (tab.doc.loadMode == LoadMode.READONLY_LARGE) return
         if (newValue.text != tab.field.text) {
             tab.pushUndo(tab.field)
+            // Keep rich-text spans aligned to the edited text.
+            if (tab.spans.isNotEmpty()) {
+                val shifted = shiftSpans(tab.spans, tab.field.text, newValue.text)
+                tab.spans.clear(); tab.spans.addAll(shifted)
+            }
         }
         tab.field = newValue
         refreshStats(tab)
+    }
+
+    // ----------------------------------------------------- rich formatting
+
+    /** Selection range, or the current paragraph if the selection is collapsed. */
+    private fun formatRange(tab: EditorTab): IntRange {
+        val f = tab.field
+        var s = minOf(f.selection.start, f.selection.end)
+        var e = maxOf(f.selection.start, f.selection.end)
+        if (s == e) {
+            val text = f.text
+            s = text.lastIndexOf('\n', (s - 1).coerceAtLeast(0)).let { if (it == -1) 0 else it + 1 }
+            e = text.indexOf('\n', e).let { if (it == -1) text.length else it }
+        }
+        return s until e
+    }
+
+    fun applyBold() = addSpan { it.copy(bold = true) }
+    fun applyItalic() = addSpan { it.copy(italic = true) }
+    fun applyTextColor(color: Int?) = if (color == null) Unit else addSpan { it.copy(color = color) }
+    fun applyHighlight(color: Int?) = if (color == null) Unit else addSpan { it.copy(bg = color) }
+    fun applyFontSize(sizeSp: Float) = addSpan { it.copy(sizeSp = sizeSp) }
+
+    private fun addSpan(build: (RichSpan) -> RichSpan) {
+        val tab = active ?: return
+        if (tab.doc.loadMode == LoadMode.READONLY_LARGE) return
+        val r = formatRange(tab)
+        if (r.isEmpty()) return
+        tab.spans.add(build(RichSpan(r.first, r.last + 1)))
+    }
+
+    /** Remove all formatting overlapping the selection/current paragraph. */
+    fun clearFormatting() {
+        val tab = active ?: return
+        if (tab.doc.loadMode == LoadMode.READONLY_LARGE) return
+        val r = formatRange(tab)
+        val s = r.first; val e = r.last + 1
+        val kept = tab.spans.flatMap { sp ->
+            if (sp.end <= s || sp.start >= e) listOf(sp)
+            else buildList {
+                if (sp.start < s) add(sp.copy(end = s))
+                if (sp.end > e) add(sp.copy(start = e))
+            }
+        }
+        tab.spans.clear(); tab.spans.addAll(kept)
+    }
+
+    /** Shift span offsets to follow a text edit (prefix/suffix diff). */
+    private fun shiftSpans(spans: List<RichSpan>, old: String, new: String): List<RichSpan> {
+        var pre = 0
+        val maxPre = minOf(old.length, new.length)
+        while (pre < maxPre && old[pre] == new[pre]) pre++
+        var suf = 0
+        while (suf < (maxPre - pre) && old[old.length - 1 - suf] == new[new.length - 1 - suf]) suf++
+        val oldEnd = old.length - suf
+        val delta = new.length - old.length
+        fun adjust(p: Int): Int = when {
+            p <= pre -> p
+            p >= oldEnd -> p + delta
+            else -> pre
+        }
+        return spans.mapNotNull { sp ->
+            val ns = adjust(sp.start); val ne = adjust(sp.end)
+            if (ne > ns) sp.copy(start = ns, end = ne) else null
+        }
     }
 
     // -------------------------------------------------------- text formatting

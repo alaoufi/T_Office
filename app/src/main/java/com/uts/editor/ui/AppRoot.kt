@@ -31,6 +31,9 @@ import androidx.compose.material.icons.filled.FormatAlignCenter
 import androidx.compose.material.icons.filled.FormatAlignJustify
 import androidx.compose.material.icons.filled.FormatAlignLeft
 import androidx.compose.material.icons.filled.FormatAlignRight
+import androidx.compose.material.icons.filled.FormatBold
+import androidx.compose.material.icons.filled.FormatClear
+import androidx.compose.material.icons.filled.FormatItalic
 import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -129,6 +132,30 @@ fun AppRoot(
         }
     }
 
+    val exportHtmlLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/html")
+    ) { uri ->
+        val tab = viewModel.active ?: return@rememberLauncherForActivityResult
+        uri?.let {
+            scope.launch {
+                runCatching {
+                    val html = com.uts.editor.util.HtmlExporter.toHtml(
+                        title = tab.doc.displayName,
+                        text = tab.field.text,
+                        spans = tab.spans.toList(),
+                        lineAligns = tab.lineAligns.toMap(),
+                        lineSpacings = tab.lineSpacings.toMap(),
+                        defaultSizeSp = settings.fontSizeSp,
+                        defaultSpacing = EditorViewModel.DEFAULT_LINE_SPACING,
+                    )
+                    context.contentResolver.openOutputStream(it)?.use { os ->
+                        os.write(html.toByteArray(Charsets.UTF_8))
+                    }
+                }
+            }
+        }
+    }
+
     val startNewSave: () -> Unit = {
         if (settings.saveFolderUri != null) showSaveName = true
         else saveAsLauncher.launch(viewModel.active?.doc?.displayName ?: "untitled.txt")
@@ -206,21 +233,23 @@ fun AppRoot(
                     onGoto = { menuOpen = false; showGoto = true },
                     onShare = { menuOpen = false; active?.let { ShareHelper.shareText(context, it.doc.displayName, it.field.text) } },
                     onExportPdf = { menuOpen = false; exportPdfLauncher.launch((active?.doc?.displayName ?: "document") + ".pdf") },
+                    onExportHtml = { menuOpen = false; exportHtmlLauncher.launch((active?.doc?.displayName?.substringBeforeLast('.') ?: "document") + ".html") },
                     onPrint = { menuOpen = false; active?.let { PrintHelper.print(context, it.doc.displayName, it.field.text) } },
                     onSettings = { menuOpen = false; showSettings = true },
-                    fontSize = settings.fontSizeSp,
                     lineSpacing = viewModel.caretLineSpacing(),
                     currentAlign = viewModel.caretLineAlignment(),
                     onUndo = { viewModel.undo() },
                     onRedo = { viewModel.redo() },
                     onFind = { viewModel.showFind(true) },
-                    onFontDecrease = { scope.launch { viewModel.settingsStore.setFontSize(settings.fontSizeSp - 1f) } },
-                    onFontIncrease = { scope.launch { viewModel.settingsStore.setFontSize(settings.fontSizeSp + 1f) } },
+                    onBold = { viewModel.applyBold() },
+                    onItalic = { viewModel.applyItalic() },
+                    onClearFormat = { viewModel.clearFormatting() },
+                    onApplySize = { sz -> viewModel.applyFontSize(sz) },
                     onSpacingDecrease = { viewModel.adjustLineSpacing(-0.1f) },
                     onSpacingIncrease = { viewModel.adjustLineSpacing(+0.1f) },
                     onSetAlign = { a -> viewModel.setLineAlignment(a) },
-                    onPickTextColor = { c -> scope.launch { viewModel.settingsStore.setTextColor(c) } },
-                    onPickBgColor = { c -> scope.launch { viewModel.settingsStore.setBgColor(c) } },
+                    onPickTextColor = { c -> viewModel.applyTextColor(c) },
+                    onPickBgColor = { c -> viewModel.applyHighlight(c) },
                     onVoice = onVoice,
                 )
 
@@ -266,6 +295,7 @@ fun AppRoot(
                             currentMatch = viewModel.findState.current,
                             lineAligns = active.lineAligns.toMap(),
                             lineSpacings = active.lineSpacings.toMap(),
+                            spans = active.spans.toList(),
                             defaultSpacing = EditorViewModel.DEFAULT_LINE_SPACING,
                             textColorOverride = settings.textColor,
                             bgColorOverride = settings.bgColor,
@@ -391,16 +421,18 @@ private fun CompactToolbar(
     onGoto: () -> Unit,
     onShare: () -> Unit,
     onExportPdf: () -> Unit,
+    onExportHtml: () -> Unit,
     onPrint: () -> Unit,
     onSettings: () -> Unit,
-    fontSize: Float,
     lineSpacing: Float,
     currentAlign: Int,
     onUndo: () -> Unit,
     onRedo: () -> Unit,
     onFind: () -> Unit,
-    onFontDecrease: () -> Unit,
-    onFontIncrease: () -> Unit,
+    onBold: () -> Unit,
+    onItalic: () -> Unit,
+    onClearFormat: () -> Unit,
+    onApplySize: (Float) -> Unit,
     onSpacingDecrease: () -> Unit,
     onSpacingIncrease: () -> Unit,
     onSetAlign: (Int) -> Unit,
@@ -444,6 +476,7 @@ private fun CompactToolbar(
                     HorizontalDivider()
                     DropdownMenuItem(text = { Text(stringResource(R.string.action_goto_line)) }, onClick = onGoto)
                     DropdownMenuItem(text = { Text(stringResource(R.string.action_share)) }, onClick = onShare)
+                    DropdownMenuItem(text = { Text(stringResource(R.string.action_export_html)) }, onClick = onExportHtml)
                     DropdownMenuItem(text = { Text(stringResource(R.string.action_export_pdf)) }, onClick = onExportPdf)
                     DropdownMenuItem(text = { Text(stringResource(R.string.action_print)) }, onClick = onPrint)
                     DropdownMenuItem(text = { Text(stringResource(R.string.action_settings)) }, onClick = onSettings)
@@ -459,18 +492,19 @@ private fun CompactToolbar(
                 ToolButton(Icons.Filled.Redo, R.string.action_redo, enabled = enabled, onClick = onRedo)
                 ToolButton(Icons.Filled.Search, R.string.action_find, onClick = onFind)
                 ToolDivider()
+                ToolButton(Icons.Filled.FormatBold, R.string.format_bold, enabled = enabled, onClick = onBold)
+                ToolButton(Icons.Filled.FormatItalic, R.string.format_italic, enabled = enabled, onClick = onItalic)
                 // Each group is one button that expands into its options (space-saving).
                 AlignMenu(currentAlign = currentAlign, onSetAlign = onSetAlign)
                 FontMenu(
-                    fontSize = fontSize,
                     lineSpacing = lineSpacing,
-                    onFontDecrease = onFontDecrease,
-                    onFontIncrease = onFontIncrease,
+                    onApplySize = onApplySize,
                     onSpacingDecrease = onSpacingDecrease,
                     onSpacingIncrease = onSpacingIncrease,
                     onPickTextColor = onPickTextColor,
                     onPickBgColor = onPickBgColor,
                 )
+                ToolButton(Icons.Filled.FormatClear, R.string.format_clear, enabled = enabled, onClick = onClearFormat)
                 ToolButton(Icons.Filled.Mic, R.string.tool_voice, enabled = enabled, onClick = onVoice)
             }
         }
@@ -522,12 +556,12 @@ private fun AlignItem(icon: ImageVector, labelRes: Int, selected: Boolean, onCli
 }
 
 /** One font button that expands into size (− / +), text colour and background colour. */
+private val FONT_SIZE_PRESETS = listOf(12f, 14f, 16f, 20f, 26f, 32f)
+
 @Composable
 private fun FontMenu(
-    fontSize: Float,
     lineSpacing: Float,
-    onFontDecrease: () -> Unit,
-    onFontIncrease: () -> Unit,
+    onApplySize: (Float) -> Unit,
     onSpacingDecrease: () -> Unit,
     onSpacingIncrease: () -> Unit,
     onPickTextColor: (Int?) -> Unit,
@@ -537,11 +571,26 @@ private fun FontMenu(
     Box {
         ToolButton(Icons.Filled.FormatSize, R.string.tool_font, onClick = { open = true })
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            StepperRow(
-                label = stringResource(R.string.settings_font_size),
-                value = "${fontSize.toInt()}",
-                onDecrease = onFontDecrease, onIncrease = onFontIncrease,
+            // Font size (applies to the selection / current paragraph).
+            Text(
+                stringResource(R.string.settings_font_size),
+                style = MaterialTheme.typography.labelMedium,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
             )
+            Row(Modifier.padding(horizontal = 8.dp)) {
+                FONT_SIZE_PRESETS.forEach { sz ->
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                        color = MaterialTheme.colorScheme.surface,
+                        modifier = Modifier.padding(3.dp).size(34.dp).clickable { open = false; onApplySize(sz) },
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text("${sz.toInt()}", style = MaterialTheme.typography.labelMedium)
+                        }
+                    }
+                }
+            }
             StepperRow(
                 label = stringResource(R.string.tool_line_spacing),
                 value = String.format("%.1f", lineSpacing),
@@ -580,18 +629,7 @@ private fun SwatchSection(labelRes: Int, presets: List<Int>, onPick: (Int?) -> U
         modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
     )
     Row(Modifier.padding(horizontal = 8.dp, vertical = 2.dp)) {
-        // "Default" chip first.
-        Surface(
-            shape = RoundedCornerShape(6.dp),
-            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-            color = MaterialTheme.colorScheme.surface,
-            modifier = Modifier.padding(4.dp).size(30.dp).clickable { onPick(null) },
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Text("A", style = MaterialTheme.typography.labelSmall)
-            }
-        }
-        presets.take(5).forEach { c ->
+        presets.take(6).forEach { c ->
             Surface(
                 color = Color(c),
                 shape = RoundedCornerShape(6.dp),
