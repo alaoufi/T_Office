@@ -4,6 +4,7 @@ import android.content.ContentResolver
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.webkit.MimeTypeMap
 import androidx.documentfile.provider.DocumentFile
 import com.uts.editor.model.LineEnding
 import com.uts.editor.model.LoadMode
@@ -26,6 +27,23 @@ object FileIo {
     private const val READ_BUFFER = 64 * 1024
 
     data class Meta(val name: String, val size: Long)
+
+    /**
+     * MIME type to use when *creating* a file, chosen so the SAF provider keeps
+     * the exact extension the user typed instead of appending ".txt".
+     *
+     * The provider appends an extension only when the requested MIME maps to a
+     * different extension than the file name already has. By handing it the MIME
+     * that corresponds to the name's own extension (or application/octet-stream,
+     * which maps to no extension, for code files like .kt/.py/.sql/.sh), the
+     * name always round-trips unchanged.
+     */
+    fun mimeForName(name: String): String {
+        val ext = name.substringAfterLast('.', "").lowercase()
+        // octet-stream maps to no extension, so the provider never appends one.
+        if (ext.isEmpty()) return "application/octet-stream"
+        return MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext) ?: "application/octet-stream"
+    }
 
     fun queryMeta(resolver: ContentResolver, uri: Uri): Meta {
         var name = "untitled.txt"
@@ -162,7 +180,7 @@ object FileIo {
         context: Context,
         treeUri: Uri,
         fileName: String,
-        mime: String = "text/plain",
+        mime: String = mimeForName(fileName),
     ): Uri? {
         val tree = DocumentFile.fromTreeUri(context, treeUri) ?: return null
         if (!tree.canWrite()) return null

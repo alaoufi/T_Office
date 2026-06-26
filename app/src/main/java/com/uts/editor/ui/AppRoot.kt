@@ -1,7 +1,13 @@
 package com.uts.editor.ui
 
+import android.app.Activity
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContract
 import androidx.activity.result.contract.ActivityResultContracts
+import com.uts.editor.data.FileIo
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -88,7 +94,7 @@ fun AppRoot(
     ) { uri -> uri?.let { viewModel.open(it) } }
 
     val saveAsLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/octet-stream")
+        remember { CreateTextDocument() }
     ) { uri -> uri?.let { viewModel.saveAs(it, pendingSaveEncoding) } }
 
     val exportPdfLauncher = rememberLauncherForActivityResult(
@@ -450,6 +456,22 @@ private fun isDark(settings: AppSettings): Boolean = when (settings.theme) {
     com.uts.editor.data.ThemeMode.DARK -> true
     com.uts.editor.data.ThemeMode.LIGHT -> false
     com.uts.editor.data.ThemeMode.SYSTEM -> false // refined by system in theme; status colors only
+}
+
+/**
+ * Like [ActivityResultContracts.CreateDocument] but derives the MIME type from
+ * the requested file name, so the storage provider preserves the exact
+ * extension (e.g. .json, .kt, .sql) instead of appending ".txt".
+ */
+private class CreateTextDocument : ActivityResultContract<String, Uri?>() {
+    override fun createIntent(context: Context, input: String): Intent =
+        Intent(Intent.ACTION_CREATE_DOCUMENT)
+            .addCategory(Intent.CATEGORY_OPENABLE)
+            .setType(FileIo.mimeForName(input))
+            .putExtra(Intent.EXTRA_TITLE, input)
+
+    override fun parseResult(resultCode: Int, intent: Intent?): Uri? =
+        if (resultCode == Activity.RESULT_OK) intent?.data else null
 }
 
 private fun caretPosition(text: String, offset: Int): Pair<Int, Int> {
