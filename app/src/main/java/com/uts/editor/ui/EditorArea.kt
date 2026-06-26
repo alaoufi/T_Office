@@ -70,9 +70,13 @@ fun EditorArea(
     val matchBg = MaterialTheme.colorScheme.secondary.copy(alpha = 0.35f)
     val currentBg = MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
 
+    // Use a monospace face only for code; plain text (where Arabic documents
+    // live) uses the default family, whose Arabic shaping is correct on all
+    // devices — the system monospace font garbles Arabic on some OEM ROMs.
+    val editorFont = if (language == SyntaxLanguage.PLAIN) FontFamily.Default else FontFamily.Monospace
     val baseStyle = LocalTextStyle.current.merge(
         TextStyle(
-            fontFamily = FontFamily.Monospace,
+            fontFamily = editorFont,
             fontSize = fontSizeSp.sp,
             color = MaterialTheme.colorScheme.onSurface,
             textDirection = TextDirection.Content,
