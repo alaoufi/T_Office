@@ -77,6 +77,7 @@ fun EditorArea(
     val align = when (editorAlign) {
         1 -> androidx.compose.ui.text.style.TextAlign.Center
         2 -> androidx.compose.ui.text.style.TextAlign.End
+        3 -> androidx.compose.ui.text.style.TextAlign.Justify
         else -> androidx.compose.ui.text.style.TextAlign.Start
     }
 

@@ -25,18 +25,20 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.FormatAlignCenter
+import androidx.compose.material.icons.filled.FormatAlignJustify
+import androidx.compose.material.icons.filled.FormatAlignLeft
 import androidx.compose.material.icons.filled.FormatAlignRight
-import androidx.compose.material.icons.filled.FormatColorFill
-import androidx.compose.material.icons.filled.FormatColorText
+import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Redo
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.TextDecrease
-import androidx.compose.material.icons.filled.TextIncrease
 import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -206,12 +208,14 @@ fun AppRoot(
                     onExportPdf = { menuOpen = false; exportPdfLauncher.launch((active?.doc?.displayName ?: "document") + ".pdf") },
                     onPrint = { menuOpen = false; active?.let { PrintHelper.print(context, it.doc.displayName, it.field.text) } },
                     onSettings = { menuOpen = false; showSettings = true },
+                    fontSize = settings.fontSizeSp,
+                    currentAlign = settings.editorAlign,
                     onUndo = { viewModel.undo() },
                     onRedo = { viewModel.redo() },
                     onFind = { viewModel.showFind(true) },
                     onFontDecrease = { scope.launch { viewModel.settingsStore.setFontSize(settings.fontSizeSp - 1f) } },
                     onFontIncrease = { scope.launch { viewModel.settingsStore.setFontSize(settings.fontSizeSp + 1f) } },
-                    onCycleAlign = { scope.launch { viewModel.settingsStore.setEditorAlign((settings.editorAlign + 1) % 3) } },
+                    onSetAlign = { a -> scope.launch { viewModel.settingsStore.setEditorAlign(a) } },
                     onPickTextColor = { c -> scope.launch { viewModel.settingsStore.setTextColor(c) } },
                     onPickBgColor = { c -> scope.launch { viewModel.settingsStore.setBgColor(c) } },
                     onVoice = onVoice,
@@ -384,12 +388,14 @@ private fun CompactToolbar(
     onExportPdf: () -> Unit,
     onPrint: () -> Unit,
     onSettings: () -> Unit,
+    fontSize: Float,
+    currentAlign: Int,
     onUndo: () -> Unit,
     onRedo: () -> Unit,
     onFind: () -> Unit,
     onFontDecrease: () -> Unit,
     onFontIncrease: () -> Unit,
-    onCycleAlign: () -> Unit,
+    onSetAlign: (Int) -> Unit,
     onPickTextColor: (Int?) -> Unit,
     onPickBgColor: (Int?) -> Unit,
     onVoice: () -> Unit,
@@ -439,11 +445,15 @@ private fun CompactToolbar(
                 ToolButton(Icons.Filled.Redo, R.string.action_redo, enabled = enabled, onClick = onRedo)
                 ToolButton(Icons.Filled.Search, R.string.action_find, onClick = onFind)
                 ToolDivider()
-                ToolButton(Icons.Filled.TextDecrease, R.string.tool_font_decrease, onClick = onFontDecrease)
-                ToolButton(Icons.Filled.TextIncrease, R.string.tool_font_increase, onClick = onFontIncrease)
-                ToolButton(Icons.Filled.FormatAlignRight, R.string.tool_align, enabled = enabled, onClick = onCycleAlign)
-                ColorPickerButton(Icons.Filled.FormatColorText, R.string.tool_text_color, TEXT_COLOR_PRESETS, onPickTextColor)
-                ColorPickerButton(Icons.Filled.FormatColorFill, R.string.tool_bg_color, BG_COLOR_PRESETS, onPickBgColor)
+                // Each group is one button that expands into its options (space-saving).
+                AlignMenu(currentAlign = currentAlign, onSetAlign = onSetAlign)
+                FontMenu(
+                    fontSize = fontSize,
+                    onFontDecrease = onFontDecrease,
+                    onFontIncrease = onFontIncrease,
+                    onPickTextColor = onPickTextColor,
+                    onPickBgColor = onPickBgColor,
+                )
                 ToolButton(Icons.Filled.Mic, R.string.tool_voice, enabled = enabled, onClick = onVoice)
             }
         }
@@ -459,38 +469,103 @@ private val BG_COLOR_PRESETS = listOf(
     0xFF263238.toInt(), 0xFFF5ECD9.toInt(), 0xFF0D1B2A.toInt(),
 )
 
+/** One alignment button that expands into start / center / end / justify. */
 @Composable
-private fun ColorPickerButton(
-    icon: ImageVector,
-    descRes: Int,
-    presets: List<Int>,
-    onPick: (Int?) -> Unit,
+private fun AlignMenu(currentAlign: Int, onSetAlign: (Int) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    val icon = when (currentAlign) {
+        1 -> Icons.Filled.FormatAlignCenter
+        2 -> Icons.Filled.FormatAlignLeft
+        3 -> Icons.Filled.FormatAlignJustify
+        else -> Icons.Filled.FormatAlignRight
+    }
+    Box {
+        ToolButton(icon, R.string.tool_align, onClick = { open = true })
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            AlignItem(Icons.Filled.FormatAlignRight, R.string.align_start, currentAlign == 0) { open = false; onSetAlign(0) }
+            AlignItem(Icons.Filled.FormatAlignCenter, R.string.align_center, currentAlign == 1) { open = false; onSetAlign(1) }
+            AlignItem(Icons.Filled.FormatAlignLeft, R.string.align_end, currentAlign == 2) { open = false; onSetAlign(2) }
+            AlignItem(Icons.Filled.FormatAlignJustify, R.string.align_justify, currentAlign == 3) { open = false; onSetAlign(3) }
+        }
+    }
+}
+
+@Composable
+private fun AlignItem(icon: ImageVector, labelRes: Int, selected: Boolean, onClick: () -> Unit) {
+    DropdownMenuItem(
+        leadingIcon = { Icon(icon, contentDescription = null) },
+        text = {
+            Text(
+                stringResource(labelRes),
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            )
+        },
+        onClick = onClick,
+    )
+}
+
+/** One font button that expands into size (− / +), text colour and background colour. */
+@Composable
+private fun FontMenu(
+    fontSize: Float,
+    onFontDecrease: () -> Unit,
+    onFontIncrease: () -> Unit,
+    onPickTextColor: (Int?) -> Unit,
+    onPickBgColor: (Int?) -> Unit,
 ) {
     var open by remember { mutableStateOf(false) }
     Box {
-        ToolButton(icon, descRes, onClick = { open = true })
+        ToolButton(Icons.Filled.FormatSize, R.string.tool_font, onClick = { open = true })
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.color_default)) },
-                onClick = { open = false; onPick(null) },
-            )
-            HorizontalDivider()
-            // Swatches in rows of 4.
-            presets.chunked(4).forEach { rowColors ->
-                Row(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
-                    rowColors.forEach { c ->
-                        Surface(
-                            color = Color(c),
-                            shape = RoundedCornerShape(6.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                            modifier = Modifier
-                                .padding(4.dp)
-                                .size(32.dp)
-                                .clickable { open = false; onPick(c) },
-                        ) {}
-                    }
+            // Font size row.
+            Row(
+                Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(stringResource(R.string.settings_font_size), style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.width(8.dp))
+                IconButton(onClick = onFontDecrease, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Filled.Remove, stringResource(R.string.tool_font_decrease), Modifier.size(18.dp))
+                }
+                Text("${fontSize.toInt()}", style = MaterialTheme.typography.bodyMedium)
+                IconButton(onClick = onFontIncrease, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Filled.Add, stringResource(R.string.tool_font_increase), Modifier.size(18.dp))
                 }
             }
+            HorizontalDivider()
+            SwatchSection(R.string.tool_text_color, TEXT_COLOR_PRESETS, onPickTextColor)
+            HorizontalDivider()
+            SwatchSection(R.string.tool_bg_color, BG_COLOR_PRESETS, onPickBgColor)
+        }
+    }
+}
+
+@Composable
+private fun SwatchSection(labelRes: Int, presets: List<Int>, onPick: (Int?) -> Unit) {
+    Text(
+        stringResource(labelRes),
+        style = MaterialTheme.typography.labelMedium,
+        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+    )
+    Row(Modifier.padding(horizontal = 8.dp, vertical = 2.dp)) {
+        // "Default" chip first.
+        Surface(
+            shape = RoundedCornerShape(6.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+            color = MaterialTheme.colorScheme.surface,
+            modifier = Modifier.padding(4.dp).size(30.dp).clickable { onPick(null) },
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Text("A", style = MaterialTheme.typography.labelSmall)
+            }
+        }
+        presets.take(5).forEach { c ->
+            Surface(
+                color = Color(c),
+                shape = RoundedCornerShape(6.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                modifier = Modifier.padding(4.dp).size(30.dp).clickable { onPick(c) },
+            ) {}
         }
     }
 }

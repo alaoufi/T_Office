@@ -40,6 +40,11 @@
     <string name="tool_bg_color">Background color</string>
     <string name="tool_voice">Voice input</string>
     <string name="color_default">Default</string>
+    <string name="align_start">Start</string>
+    <string name="align_center">Center</string>
+    <string name="align_end">End</string>
+    <string name="align_justify">Justify</string>
+    <string name="tool_font">Font</string>
     <string name="voice_unavailable">Voice input is not available on this device.</string>
 
     <!-- Editor / status -->

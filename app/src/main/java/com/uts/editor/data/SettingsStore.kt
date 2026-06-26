@@ -79,7 +79,7 @@ class SettingsStore(private val context: Context) {
         if (uri == null) it.remove(Keys.SAVE_FOLDER_URI) else it[Keys.SAVE_FOLDER_URI] = uri
         if (name == null) it.remove(Keys.SAVE_FOLDER_NAME) else it[Keys.SAVE_FOLDER_NAME] = name
     }
-    suspend fun setEditorAlign(align: Int) = edit { it[Keys.EDITOR_ALIGN] = align.coerceIn(0, 2) }
+    suspend fun setEditorAlign(align: Int) = edit { it[Keys.EDITOR_ALIGN] = align.coerceIn(0, 3) }
     suspend fun setTextColor(color: Int?) = edit {
         if (color == null) it.remove(Keys.TEXT_COLOR) else it[Keys.TEXT_COLOR] = color
     }
