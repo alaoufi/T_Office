@@ -51,35 +51,82 @@ object EncodingDetector {
     fun looksBinary(sample: ByteArray): Boolean {
         if (sample.isEmpty()) return false
         if (detectBom(sample) != null) return false           // BOM => a Unicode text file
+        if (isStrictUtf8(sample)) return false                 // valid UTF-8 => text
+        if (utf16Guess(sample) != null) return false          // UTF-16 (no BOM) text
 
-        // NUL / control analysis runs FIRST: NUL is a valid UTF-8 code point, so a
-        // binary blob of low bytes would otherwise pass a strict-UTF-8 check. Real
-        // text essentially never contains NUL or many C0 control bytes.
+        // NUL / control analysis: real text in a single-byte/UTF-8 encoding has no
+        // NUL bytes and few C0 controls. (UTF-16 was already ruled in above.)
         val n = sample.size
         var nul = 0
-        var nulEven = 0
         var control = 0
         for (i in 0 until n) {
             val b = sample[i].toInt() and 0xFF
             when {
-                b == 0x00 -> { nul++; if (i % 2 == 0) nulEven++ }
+                b == 0x00 -> nul++
                 b == 0x09 || b == 0x0A || b == 0x0D -> { /* tab/newline: fine */ }
                 b < 0x20 -> control++                           // other C0 controls
                 b == 0x7F -> control++
             }
         }
-        if (nul > 0) {
-            // UTF-16 without BOM: ASCII text leaves ~half the bytes as NUL, all on
-            // one parity (even or odd). Treat that regular pattern as text.
-            val onOneParity = nulEven == 0 || nulEven == nul
-            val roughlyHalf = nul * 2 in (n - n / 4)..(n + n / 4)
-            if (onOneParity && roughlyHalf && n >= 8) return false
-            return true                                          // stray NULs => binary
-        }
-        if (control.toDouble() / n > 0.10) return true          // dense controls => binary
+        if (nul > 0) return true                                 // NUL but not UTF-16 => binary
+        return control.toDouble() / n > 0.10                     // dense controls => binary
+    }
 
-        // No NULs, few controls: it's text (any encoding, incl. valid UTF-8).
-        return false
+    /**
+     * Detect UTF-16 (little- or big-endian) text that has no BOM — common for
+     * Arabic files exported from Windows. Decodes both endiannesses and accepts
+     * the one that yields clean, mostly-textual content. Single-byte or UTF-8
+     * data decoded as UTF-16 turns into noise and scores too low to match, so
+     * this never steals genuinely single-byte files.
+     */
+    private fun utf16Guess(sample: ByteArray): ScoredEncoding? {
+        if (sample.size < 16) return null
+        val le = scoreUtf16Variant(sample, littleEndian = true)
+        val be = scoreUtf16Variant(sample, littleEndian = false)
+        val best = listOf(le, be).filterNotNull().maxByOrNull { it.confidence } ?: return null
+        return if (best.confidence >= 85) best else null
+    }
+
+    /**
+     * Score one UTF-16 endianness using two independent signals:
+     *  - structural: in real UTF-16 text almost every 16-bit unit has a small
+     *    high byte (0x00 for ASCII/Latin, 0x06/0x07 for Arabic, etc.). Random
+     *    single-byte data decoded as UTF-16 has high bytes spread across 0..255,
+     *    so this alone rejects mis-decoded Latin/Arabic codepages.
+     *  - textual: the decoded characters are mostly Arabic/Latin/whitespace.
+     */
+    private fun scoreUtf16Variant(sample: ByteArray, littleEndian: Boolean): ScoredEncoding? {
+        val pairs = sample.size / 2
+        if (pairs < 8) return null
+        var textyHigh = 0
+        for (k in 0 until pairs) {
+            val hi = sample[if (littleEndian) 2 * k + 1 else 2 * k].toInt() and 0xFF
+            // High bytes seen in normal text: ASCII/Latin/Cyrillic/Hebrew/Arabic
+            // blocks (<=0x09), spaces (0x20/0x21), and Arabic Presentation Forms
+            // (0xFB-0xFE) which Windows Arabic files frequently use.
+            if (hi <= 0x09 || hi == 0x20 || hi == 0x21 || hi in 0xFB..0xFE) textyHigh++
+        }
+        val highRatio = textyHigh.toDouble() / pairs
+        if (highRatio < 0.90) return null
+
+        val enc = if (littleEndian) TextEncoding.UTF_16LE else TextEncoding.UTF_16BE
+        val text = decodeLossy(sample, enc) ?: return null
+        var good = 0
+        for (ch in text) {
+            val code = ch.code
+            val ok = code in 0x0600..0x06FF || code in 0x0750..0x077F ||  // Arabic
+                code in 0xFB50..0xFDFF || code in 0xFE70..0xFEFF ||       // Arabic Presentation Forms
+                code == 0x09 || code == 0x0A || code == 0x0D ||           // whitespace
+                code in 0x20..0x7E ||                                     // ASCII printable
+                code in 0xA0..0x24F                                        // Latin-1/extended
+            if (ok) good++
+        }
+        if (text.isEmpty()) return null
+        val textRatio = good.toDouble() / text.length
+        if (textRatio < 0.80) return null
+
+        val confidence = (minOf(highRatio, textRatio) * 100).toInt().coerceIn(0, 96)
+        return ScoredEncoding(enc, confidence)
     }
 
     fun detect(sample: ByteArray): DetectionResult {
@@ -88,6 +135,15 @@ object EncodingDetector {
         }
 
         detectBom(sample)?.let { return DetectionResult(it, 100, needsConfirmation = false) }
+
+        // UTF-16 without a BOM (common for Windows-exported Arabic files) MUST be
+        // checked before the UTF-8/ASCII shortcuts: UTF-16LE Arabic bytes are
+        // coincidentally valid UTF-8 (Arabic low bytes are ASCII-range, high bytes
+        // are 0x06/0x07), so a UTF-8 check would otherwise claim and mangle them.
+        // The structural high-byte test keeps genuine UTF-8/ASCII from matching.
+        utf16Guess(sample)?.let {
+            return DetectionResult(it.encoding, it.confidence, needsConfirmation = false)
+        }
 
         // Pure ASCII is a valid UTF-8 subset — open as UTF-8.
         if (sample.all { it >= 0 }) {
