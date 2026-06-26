@@ -33,6 +33,14 @@
     <string name="format_quote">Quote</string>
     <string name="format_uppercase">UPPERCASE</string>
     <string name="format_lowercase">lowercase</string>
+    <string name="tool_font_increase">Increase font</string>
+    <string name="tool_font_decrease">Decrease font</string>
+    <string name="tool_align">Alignment</string>
+    <string name="tool_text_color">Text color</string>
+    <string name="tool_bg_color">Background color</string>
+    <string name="tool_voice">Voice input</string>
+    <string name="color_default">Default</string>
+    <string name="voice_unavailable">Voice input is not available on this device.</string>
 
     <!-- Editor / status -->
     <string name="untitled">Untitled</string>

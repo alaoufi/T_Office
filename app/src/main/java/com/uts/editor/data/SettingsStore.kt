@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -24,6 +25,11 @@ data class AppSettings(
     val saveFolderUri: String? = null,
     /** Human-readable name of that folder, for display in settings. */
     val saveFolderName: String? = null,
+    /** Editor text alignment: 0 = start, 1 = center, 2 = end. */
+    val editorAlign: Int = 0,
+    /** Optional ARGB overrides for the editor (null = follow theme). */
+    val textColor: Int? = null,
+    val bgColor: Int? = null,
 )
 
 private val Context.dataStore by preferencesDataStore(name = "uts_settings")
@@ -40,6 +46,9 @@ class SettingsStore(private val context: Context) {
         val WORD_WRAP = booleanPreferencesKey("word_wrap")
         val SAVE_FOLDER_URI = stringPreferencesKey("save_folder_uri")
         val SAVE_FOLDER_NAME = stringPreferencesKey("save_folder_name")
+        val EDITOR_ALIGN = intPreferencesKey("editor_align")
+        val TEXT_COLOR = intPreferencesKey("text_color")
+        val BG_COLOR = intPreferencesKey("bg_color")
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { p ->
@@ -52,6 +61,9 @@ class SettingsStore(private val context: Context) {
             wordWrap = p[Keys.WORD_WRAP] ?: true,
             saveFolderUri = p[Keys.SAVE_FOLDER_URI],
             saveFolderName = p[Keys.SAVE_FOLDER_NAME],
+            editorAlign = p[Keys.EDITOR_ALIGN] ?: 0,
+            textColor = p[Keys.TEXT_COLOR],
+            bgColor = p[Keys.BG_COLOR],
         )
     }
 
@@ -66,6 +78,13 @@ class SettingsStore(private val context: Context) {
     suspend fun setSaveFolder(uri: String?, name: String?) = edit {
         if (uri == null) it.remove(Keys.SAVE_FOLDER_URI) else it[Keys.SAVE_FOLDER_URI] = uri
         if (name == null) it.remove(Keys.SAVE_FOLDER_NAME) else it[Keys.SAVE_FOLDER_NAME] = name
+    }
+    suspend fun setEditorAlign(align: Int) = edit { it[Keys.EDITOR_ALIGN] = align.coerceIn(0, 2) }
+    suspend fun setTextColor(color: Int?) = edit {
+        if (color == null) it.remove(Keys.TEXT_COLOR) else it[Keys.TEXT_COLOR] = color
+    }
+    suspend fun setBgColor(color: Int?) = edit {
+        if (color == null) it.remove(Keys.BG_COLOR) else it[Keys.BG_COLOR] = color
     }
 
     // --- Per-file last encoding memory ---

@@ -4,9 +4,11 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.speech.RecognizerIntent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContract
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -23,18 +25,18 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.FormatBold
-import androidx.compose.material.icons.filled.FormatItalic
-import androidx.compose.material.icons.filled.FormatListBulleted
-import androidx.compose.material.icons.filled.FormatQuote
+import androidx.compose.material.icons.filled.FormatAlignRight
+import androidx.compose.material.icons.filled.FormatColorFill
+import androidx.compose.material.icons.filled.FormatColorText
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Redo
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Title
+import androidx.compose.material.icons.filled.TextDecrease
+import androidx.compose.material.icons.filled.TextIncrease
 import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -59,6 +61,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -133,6 +136,32 @@ fun AppRoot(
         if (!viewModel.requestCloseTab(idx)) pendingClose = idx
     }
 
+    // Voice input (speech-to-text): the system recognizer returns the dictated
+    // text, which we insert at the caret.
+    val voiceLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val spoken = result.data
+                ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+                ?.firstOrNull()
+            if (!spoken.isNullOrBlank()) viewModel.insertAtCursor(spoken)
+        }
+    }
+    val onVoice: () -> Unit = {
+        val lang = when (LocaleManager.storedLanguage(context)) {
+            AppLanguage.ARABIC -> "ar"
+            AppLanguage.ENGLISH -> "en"
+            AppLanguage.SYSTEM -> java.util.Locale.getDefault().toLanguageTag()
+        }
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, lang)
+        }
+        val launched = runCatching { voiceLauncher.launch(intent); true }.getOrDefault(false)
+        if (!launched) scope.launch { snackbar.showSnackbar(context.getString(R.string.voice_unavailable)) }
+    }
+
     LaunchedEffect(Unit) {
         viewModel.messages.collect { snackbar.showSnackbar(it.text) }
     }
@@ -180,11 +209,12 @@ fun AppRoot(
                     onUndo = { viewModel.undo() },
                     onRedo = { viewModel.redo() },
                     onFind = { viewModel.showFind(true) },
-                    onBold = { viewModel.wrapSelection("**", "**") },
-                    onItalic = { viewModel.wrapSelection("*", "*") },
-                    onHeading = { viewModel.prefixLines("# ") },
-                    onList = { viewModel.prefixLines("- ") },
-                    onQuote = { viewModel.prefixLines("> ") },
+                    onFontDecrease = { scope.launch { viewModel.settingsStore.setFontSize(settings.fontSizeSp - 1f) } },
+                    onFontIncrease = { scope.launch { viewModel.settingsStore.setFontSize(settings.fontSizeSp + 1f) } },
+                    onCycleAlign = { scope.launch { viewModel.settingsStore.setEditorAlign((settings.editorAlign + 1) % 3) } },
+                    onPickTextColor = { c -> scope.launch { viewModel.settingsStore.setTextColor(c) } },
+                    onPickBgColor = { c -> scope.launch { viewModel.settingsStore.setBgColor(c) } },
+                    onVoice = onVoice,
                 )
 
                 if (viewModel.isBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -227,6 +257,9 @@ fun AppRoot(
                             readOnly = readOnly,
                             matches = viewModel.findState.matches,
                             currentMatch = viewModel.findState.current,
+                            editorAlign = settings.editorAlign,
+                            textColorOverride = settings.textColor,
+                            bgColorOverride = settings.bgColor,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
                         )
                         if (readOnly) {
@@ -354,24 +387,22 @@ private fun CompactToolbar(
     onUndo: () -> Unit,
     onRedo: () -> Unit,
     onFind: () -> Unit,
-    onBold: () -> Unit,
-    onItalic: () -> Unit,
-    onHeading: () -> Unit,
-    onList: () -> Unit,
-    onQuote: () -> Unit,
+    onFontDecrease: () -> Unit,
+    onFontIncrease: () -> Unit,
+    onCycleAlign: () -> Unit,
+    onPickTextColor: (Int?) -> Unit,
+    onPickBgColor: (Int?) -> Unit,
+    onVoice: () -> Unit,
 ) {
     Surface(tonalElevation = 2.dp, color = MaterialTheme.colorScheme.surface) {
         Row(
-            Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 2.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            // Pinned overflow menu (does not scroll with the tools).
             Box {
                 ToolButton(Icons.Filled.MoreVert, R.string.action_menu, onClick = onMenuOpen)
                 DropdownMenu(expanded = menuOpen, onDismissRequest = onMenuDismiss) {
-                    // File name header (at the top of the menu, as requested).
                     DropdownMenuItem(
                         enabled = false,
                         text = {
@@ -399,15 +430,67 @@ private fun CompactToolbar(
                 }
             }
             ToolDivider()
-            ToolButton(Icons.Filled.Undo, R.string.action_undo, enabled = enabled, onClick = onUndo)
-            ToolButton(Icons.Filled.Redo, R.string.action_redo, enabled = enabled, onClick = onRedo)
-            ToolButton(Icons.Filled.Search, R.string.action_find, onClick = onFind)
-            ToolDivider()
-            ToolButton(Icons.Filled.FormatBold, R.string.format_bold, enabled = enabled, onClick = onBold)
-            ToolButton(Icons.Filled.FormatItalic, R.string.format_italic, enabled = enabled, onClick = onItalic)
-            ToolButton(Icons.Filled.Title, R.string.format_heading, enabled = enabled, onClick = onHeading)
-            ToolButton(Icons.Filled.FormatListBulleted, R.string.format_list, enabled = enabled, onClick = onList)
-            ToolButton(Icons.Filled.FormatQuote, R.string.format_quote, enabled = enabled, onClick = onQuote)
+            // Scrollable tools.
+            Row(
+                Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ToolButton(Icons.Filled.Undo, R.string.action_undo, enabled = enabled, onClick = onUndo)
+                ToolButton(Icons.Filled.Redo, R.string.action_redo, enabled = enabled, onClick = onRedo)
+                ToolButton(Icons.Filled.Search, R.string.action_find, onClick = onFind)
+                ToolDivider()
+                ToolButton(Icons.Filled.TextDecrease, R.string.tool_font_decrease, onClick = onFontDecrease)
+                ToolButton(Icons.Filled.TextIncrease, R.string.tool_font_increase, onClick = onFontIncrease)
+                ToolButton(Icons.Filled.FormatAlignRight, R.string.tool_align, enabled = enabled, onClick = onCycleAlign)
+                ColorPickerButton(Icons.Filled.FormatColorText, R.string.tool_text_color, TEXT_COLOR_PRESETS, onPickTextColor)
+                ColorPickerButton(Icons.Filled.FormatColorFill, R.string.tool_bg_color, BG_COLOR_PRESETS, onPickBgColor)
+                ToolButton(Icons.Filled.Mic, R.string.tool_voice, enabled = enabled, onClick = onVoice)
+            }
+        }
+    }
+}
+
+private val TEXT_COLOR_PRESETS = listOf(
+    0xFF000000.toInt(), 0xFFFFFFFF.toInt(), 0xFFD32F2F.toInt(), 0xFF1565C0.toInt(),
+    0xFF2E7D32.toInt(), 0xFFEF6C00.toInt(), 0xFF6A1B9A.toInt(),
+)
+private val BG_COLOR_PRESETS = listOf(
+    0xFFFFFFFF.toInt(), 0xFF000000.toInt(), 0xFFFFF8E1.toInt(), 0xFFEEEEEE.toInt(),
+    0xFF263238.toInt(), 0xFFF5ECD9.toInt(), 0xFF0D1B2A.toInt(),
+)
+
+@Composable
+private fun ColorPickerButton(
+    icon: ImageVector,
+    descRes: Int,
+    presets: List<Int>,
+    onPick: (Int?) -> Unit,
+) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        ToolButton(icon, descRes, onClick = { open = true })
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.color_default)) },
+                onClick = { open = false; onPick(null) },
+            )
+            HorizontalDivider()
+            // Swatches in rows of 4.
+            presets.chunked(4).forEach { rowColors ->
+                Row(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+                    rowColors.forEach { c ->
+                        Surface(
+                            color = Color(c),
+                            shape = RoundedCornerShape(6.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                            modifier = Modifier
+                                .padding(4.dp)
+                                .size(32.dp)
+                                .clickable { open = false; onPick(c) },
+                        ) {}
+                    }
+                }
+            }
         }
     }
 }

@@ -429,6 +429,23 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         refreshStats(tab)
     }
 
+    /** Insert [insertText] at the caret, replacing any selection (used by voice input). */
+    fun insertAtCursor(insertText: String) {
+        val tab = active ?: return
+        if (tab.doc.loadMode == LoadMode.READONLY_LARGE) return
+        val f = tab.field
+        val start = minOf(f.selection.start, f.selection.end)
+        val end = maxOf(f.selection.start, f.selection.end)
+        val text = f.text
+        val newText = text.substring(0, start) + insertText + text.substring(end)
+        tab.pushUndo(f)
+        tab.field = TextFieldValue(
+            newText,
+            selection = androidx.compose.ui.text.TextRange(start + insertText.length),
+        )
+        refreshStats(tab)
+    }
+
     fun undo() {
         val tab = active ?: return
         tab.undo()?.let { tab.field = it; refreshStats(tab) }

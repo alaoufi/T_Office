@@ -58,6 +58,9 @@ fun EditorArea(
     readOnly: Boolean,
     matches: List<IntRange>,
     currentMatch: Int,
+    editorAlign: Int = 0,
+    textColorOverride: Int? = null,
+    bgColorOverride: Int? = null,
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
@@ -69,6 +72,13 @@ fun EditorArea(
     val gutterText = MaterialTheme.colorScheme.onSurfaceVariant
     val matchBg = MaterialTheme.colorScheme.secondary.copy(alpha = 0.35f)
     val currentBg = MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
+    val textColor = textColorOverride?.let { Color(it) } ?: MaterialTheme.colorScheme.onSurface
+    val bgColor = bgColorOverride?.let { Color(it) }
+    val align = when (editorAlign) {
+        1 -> androidx.compose.ui.text.style.TextAlign.Center
+        2 -> androidx.compose.ui.text.style.TextAlign.End
+        else -> androidx.compose.ui.text.style.TextAlign.Start
+    }
 
     // Use a monospace face only for code; plain text (where Arabic documents
     // live) uses the default family, whose Arabic shaping is correct on all
@@ -80,7 +90,8 @@ fun EditorArea(
             fontSize = fontSizeSp.sp,
             // Comfortable line spacing so lines are clearly separated and readable.
             lineHeight = (fontSizeSp * 1.6f).sp,
-            color = MaterialTheme.colorScheme.onSurface,
+            color = textColor,
+            textAlign = align,
             textDirection = TextDirection.Content,
         )
     )
@@ -114,7 +125,11 @@ fun EditorArea(
         Modifier.verticalScroll(scroll).horizontalScroll(hScroll)
     }
 
-    Row(modifier = modifier.fillMaxSize().then(scrollModifier)) {
+    val containerModifier = modifier
+        .fillMaxSize()
+        .let { if (bgColor != null) it.background(bgColor) else it }
+        .then(scrollModifier)
+    Row(modifier = containerModifier) {
         if (showLineNumbers && lineStarts.size <= MAX_GUTTER_LINES) {
             val gutterWidthDp = (12 + lineStarts.size.toString().length * 9).dp
             Box(
