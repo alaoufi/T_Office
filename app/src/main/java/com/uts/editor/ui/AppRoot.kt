@@ -25,7 +25,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.FormatBold
 import androidx.compose.material.icons.filled.FormatItalic
 import androidx.compose.material.icons.filled.FormatListBulleted
@@ -34,13 +33,13 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Redo
-import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Title
 import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -50,7 +49,6 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -61,7 +59,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
@@ -69,6 +67,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.uts.editor.R
 import com.uts.editor.data.AppLanguage
 import com.uts.editor.data.AppSettings
@@ -125,12 +124,10 @@ fun AppRoot(
         }
     }
 
-    // Save an unsaved document: use the default folder if one is set, else the picker.
     val startNewSave: () -> Unit = {
         if (settings.saveFolderUri != null) showSaveName = true
         else saveAsLauncher.launch(viewModel.active?.doc?.displayName ?: "untitled.txt")
     }
-    val onSave: () -> Unit = { viewModel.save(onNeedSaveAs = startNewSave) }
     val onCloseActive: () -> Unit = {
         val idx = viewModel.activeIndex
         if (!viewModel.requestCloseTab(idx)) pendingClose = idx
@@ -144,7 +141,6 @@ fun AppRoot(
     val dark = isDark(settings)
     val syntaxColors = remember(dark) { syntaxColorsFor(dark) }
 
-    // Lay the whole UI out RTL for Arabic / LTR for English (System follows device).
     val layoutDir = when (LocaleManager.storedLanguage(context)) {
         AppLanguage.ARABIC -> LayoutDirection.Rtl
         AppLanguage.ENGLISH -> LayoutDirection.Ltr
@@ -154,45 +150,6 @@ fun AppRoot(
     CompositionLocalProvider(LocalLayoutDirection provides layoutDir) {
         Scaffold(
             snackbarHost = { SnackbarHost(snackbar) },
-            topBar = {
-                TopAppBar(
-                    // Menu sits at the "start" — the right side in Arabic (RTL).
-                    navigationIcon = {
-                        IconButton(onClick = { menuOpen = true }) {
-                            Icon(Icons.Filled.MoreVert, stringResource(R.string.action_menu))
-                        }
-                        OverflowMenu(
-                            expanded = menuOpen,
-                            onDismiss = { menuOpen = false },
-                            onOpen = { menuOpen = false; openLauncher.launch(arrayOf("*/*")) },
-                            onSaveAs = { menuOpen = false; saveAsLauncher.launch(active?.doc?.displayName ?: "untitled.txt") },
-                            onGoto = { menuOpen = false; showGoto = true },
-                            onShare = {
-                                menuOpen = false
-                                active?.let { ShareHelper.shareText(context, it.doc.displayName, it.field.text) }
-                            },
-                            onExportPdf = {
-                                menuOpen = false
-                                exportPdfLauncher.launch((active?.doc?.displayName ?: "document") + ".pdf")
-                            },
-                            onPrint = {
-                                menuOpen = false
-                                active?.let { PrintHelper.print(context, it.doc.displayName, it.field.text) }
-                            },
-                            onSettings = { menuOpen = false; showSettings = true },
-                        )
-                    },
-                    title = {
-                        val title = active?.doc?.displayName ?: stringResource(R.string.app_name)
-                        val modified = active?.isModified() == true
-                        Text(
-                            text = if (modified) "• $title" else title,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    },
-                )
-            },
             bottomBar = { active?.let { StatusBar(it) } },
         ) { padding ->
             Column(
@@ -200,14 +157,26 @@ fun AppRoot(
                     .fillMaxSize()
                     .padding(padding)
             ) {
-                if (viewModel.isBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
-
                 val readOnly = active?.doc?.loadMode == LoadMode.READONLY_LARGE
-                EditorToolbar(
+
+                // One compact row: overflow menu (carries file actions + file name) + edit/format tools.
+                CompactToolbar(
                     enabled = active != null && !readOnly,
-                    onNew = { viewModel.newDocument() },
-                    onSave = onSave,
-                    onClose = onCloseActive,
+                    fileName = active?.doc?.displayName ?: stringResource(R.string.app_name),
+                    modified = active?.isModified() == true,
+                    menuOpen = menuOpen,
+                    onMenuOpen = { menuOpen = true },
+                    onMenuDismiss = { menuOpen = false },
+                    onNew = { menuOpen = false; viewModel.newDocument() },
+                    onOpen = { menuOpen = false; openLauncher.launch(arrayOf("*/*")) },
+                    onSave = { menuOpen = false; viewModel.save(onNeedSaveAs = startNewSave) },
+                    onSaveAs = { menuOpen = false; saveAsLauncher.launch(active?.doc?.displayName ?: "untitled.txt") },
+                    onCloseDoc = { menuOpen = false; onCloseActive() },
+                    onGoto = { menuOpen = false; showGoto = true },
+                    onShare = { menuOpen = false; active?.let { ShareHelper.shareText(context, it.doc.displayName, it.field.text) } },
+                    onExportPdf = { menuOpen = false; exportPdfLauncher.launch((active?.doc?.displayName ?: "document") + ".pdf") },
+                    onPrint = { menuOpen = false; active?.let { PrintHelper.print(context, it.doc.displayName, it.field.text) } },
+                    onSettings = { menuOpen = false; showSettings = true },
                     onUndo = { viewModel.undo() },
                     onRedo = { viewModel.redo() },
                     onFind = { viewModel.showFind(true) },
@@ -217,6 +186,8 @@ fun AppRoot(
                     onList = { viewModel.prefixLines("- ") },
                     onQuote = { viewModel.prefixLines("> ") },
                 )
+
+                if (viewModel.isBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
 
                 TabStrip(
                     tabs = viewModel.tabs,
@@ -256,7 +227,7 @@ fun AppRoot(
                             readOnly = readOnly,
                             matches = viewModel.findState.matches,
                             currentMatch = viewModel.findState.current,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
                         )
                         if (readOnly) {
                             LargeFileControls(
@@ -360,12 +331,26 @@ fun AppRoot(
     }
 }
 
+/** Single low-profile row: the ⋮ menu (file actions + current file name) followed
+ *  by the edit/format tools. Designed to use as little vertical space as possible. */
 @Composable
-private fun EditorToolbar(
+private fun CompactToolbar(
     enabled: Boolean,
+    fileName: String,
+    modified: Boolean,
+    menuOpen: Boolean,
+    onMenuOpen: () -> Unit,
+    onMenuDismiss: () -> Unit,
     onNew: () -> Unit,
+    onOpen: () -> Unit,
     onSave: () -> Unit,
-    onClose: () -> Unit,
+    onSaveAs: () -> Unit,
+    onCloseDoc: () -> Unit,
+    onGoto: () -> Unit,
+    onShare: () -> Unit,
+    onExportPdf: () -> Unit,
+    onPrint: () -> Unit,
+    onSettings: () -> Unit,
     onUndo: () -> Unit,
     onRedo: () -> Unit,
     onFind: () -> Unit,
@@ -380,12 +365,39 @@ private fun EditorToolbar(
             Modifier
                 .fillMaxWidth()
                 .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 4.dp, vertical = 2.dp),
+                .padding(horizontal = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            ToolButton(Icons.Filled.Add, R.string.action_new, onClick = onNew)
-            ToolButton(Icons.Filled.Save, R.string.action_save, enabled = enabled, onClick = onSave)
-            ToolButton(Icons.Filled.Close, R.string.action_close_document, onClick = onClose)
+            Box {
+                ToolButton(Icons.Filled.MoreVert, R.string.action_menu, onClick = onMenuOpen)
+                DropdownMenu(expanded = menuOpen, onDismissRequest = onMenuDismiss) {
+                    // File name header (at the top of the menu, as requested).
+                    DropdownMenuItem(
+                        enabled = false,
+                        text = {
+                            Text(
+                                text = if (modified) "• $fileName" else fileName,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        },
+                        onClick = {},
+                    )
+                    HorizontalDivider()
+                    DropdownMenuItem(text = { Text(stringResource(R.string.action_new)) }, onClick = onNew)
+                    DropdownMenuItem(text = { Text(stringResource(R.string.action_open)) }, onClick = onOpen)
+                    DropdownMenuItem(text = { Text(stringResource(R.string.action_save)) }, onClick = onSave)
+                    DropdownMenuItem(text = { Text(stringResource(R.string.action_save_as)) }, onClick = onSaveAs)
+                    DropdownMenuItem(text = { Text(stringResource(R.string.action_close_document)) }, onClick = onCloseDoc)
+                    HorizontalDivider()
+                    DropdownMenuItem(text = { Text(stringResource(R.string.action_goto_line)) }, onClick = onGoto)
+                    DropdownMenuItem(text = { Text(stringResource(R.string.action_share)) }, onClick = onShare)
+                    DropdownMenuItem(text = { Text(stringResource(R.string.action_export_pdf)) }, onClick = onExportPdf)
+                    DropdownMenuItem(text = { Text(stringResource(R.string.action_print)) }, onClick = onPrint)
+                    DropdownMenuItem(text = { Text(stringResource(R.string.action_settings)) }, onClick = onSettings)
+                }
+            }
             ToolDivider()
             ToolButton(Icons.Filled.Undo, R.string.action_undo, enabled = enabled, onClick = onUndo)
             ToolButton(Icons.Filled.Redo, R.string.action_redo, enabled = enabled, onClick = onRedo)
@@ -401,48 +413,20 @@ private fun EditorToolbar(
 }
 
 @Composable
-private fun ToolButton(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    descRes: Int,
-    enabled: Boolean = true,
-    onClick: () -> Unit,
-) {
-    IconButton(onClick = onClick, enabled = enabled) {
-        Icon(icon, contentDescription = stringResource(descRes))
+private fun ToolButton(icon: ImageVector, descRes: Int, enabled: Boolean = true, onClick: () -> Unit) {
+    IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(40.dp)) {
+        Icon(icon, contentDescription = stringResource(descRes), modifier = Modifier.size(21.dp))
     }
 }
 
 @Composable
 private fun ToolDivider() {
-    Spacer(Modifier.width(4.dp))
+    Spacer(Modifier.width(3.dp))
     Surface(
         color = MaterialTheme.colorScheme.outlineVariant,
-        modifier = Modifier.width(1.dp).height(24.dp),
+        modifier = Modifier.width(1.dp).height(22.dp),
     ) {}
-    Spacer(Modifier.width(4.dp))
-}
-
-@Composable
-private fun OverflowMenu(
-    expanded: Boolean,
-    onDismiss: () -> Unit,
-    onOpen: () -> Unit,
-    onSaveAs: () -> Unit,
-    onGoto: () -> Unit,
-    onShare: () -> Unit,
-    onExportPdf: () -> Unit,
-    onPrint: () -> Unit,
-    onSettings: () -> Unit,
-) {
-    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
-        DropdownMenuItem(text = { Text(stringResource(R.string.action_open)) }, onClick = onOpen)
-        DropdownMenuItem(text = { Text(stringResource(R.string.action_save_as)) }, onClick = onSaveAs)
-        DropdownMenuItem(text = { Text(stringResource(R.string.action_goto_line)) }, onClick = onGoto)
-        DropdownMenuItem(text = { Text(stringResource(R.string.action_share)) }, onClick = onShare)
-        DropdownMenuItem(text = { Text(stringResource(R.string.action_export_pdf)) }, onClick = onExportPdf)
-        DropdownMenuItem(text = { Text(stringResource(R.string.action_print)) }, onClick = onPrint)
-        DropdownMenuItem(text = { Text(stringResource(R.string.action_settings)) }, onClick = onSettings)
-    }
+    Spacer(Modifier.width(3.dp))
 }
 
 @Composable
@@ -457,7 +441,7 @@ private fun TabStrip(
         Modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 6.dp, vertical = 4.dp),
+            .padding(horizontal = 6.dp, vertical = 3.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         tabs.forEachIndexed { index, tab ->
@@ -473,11 +457,11 @@ private fun TabStrip(
                         text = (if (tab.isModified()) "• " else "") + tab.doc.displayName,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.labelLarge,
-                        modifier = Modifier.padding(vertical = 8.dp),
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.padding(vertical = 6.dp),
                     )
-                    IconButton(onClick = { onClose(index) }, modifier = Modifier.size(32.dp)) {
-                        Icon(Icons.Filled.Close, stringResource(R.string.tab_close), modifier = Modifier.size(16.dp))
+                    IconButton(onClick = { onClose(index) }, modifier = Modifier.size(30.dp)) {
+                        Icon(Icons.Filled.Close, stringResource(R.string.tab_close), modifier = Modifier.size(15.dp))
                     }
                 }
             }
@@ -493,8 +477,8 @@ private fun StatusBar(tab: EditorTab) {
             Modifier
                 .fillMaxWidth()
                 .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 12.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                .padding(horizontal = 12.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             val s = tab.doc.stats
@@ -509,7 +493,7 @@ private fun StatusBar(tab: EditorTab) {
 
 @Composable
 private fun StatusItem(text: String) {
-    Text(text, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+    Text(text, style = MaterialTheme.typography.labelSmall, fontSize = 11.sp, maxLines = 1)
 }
 
 @Composable
