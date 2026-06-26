@@ -31,6 +31,13 @@ data class ZipPrompt(
     val entries: List<ZipSupport.Entry>,
 )
 
+/** Shown when a file does not look like text (e.g. an image), before opening it. */
+data class BinaryPrompt(
+    val uri: Uri,
+    val displayName: String,
+    val size: Long,
+)
+
 /** State for find / replace. [matches] are ranges into the current text. */
 data class FindState(
     val visible: Boolean = false,

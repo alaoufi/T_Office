@@ -213,6 +213,17 @@ fun ZipPickerDialog(
 }
 
 @Composable
+fun BinaryFileDialog(name: String, onOpenAnyway: () -> Unit, onCancel: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onCancel,
+        confirmButton = { TextButton(onClick = onOpenAnyway) { Text(stringResource(R.string.action_open)) } },
+        dismissButton = { TextButton(onClick = onCancel) { Text(stringResource(R.string.action_cancel)) } },
+        title = { Text(name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        text = { Text(stringResource(R.string.msg_binary_warning)) },
+    )
+}
+
+@Composable
 fun DiscardDialog(name: String, onSave: () -> Unit, onDiscard: () -> Unit, onCancel: () -> Unit) {
     AlertDialog(
         onDismissRequest = onCancel,

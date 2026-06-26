@@ -258,6 +258,14 @@ fun AppRoot(
         )
     }
 
+    viewModel.binaryPrompt?.let { bin ->
+        BinaryFileDialog(
+            name = bin.displayName,
+            onOpenAnyway = { viewModel.openBinaryAnyway() },
+            onCancel = { viewModel.cancelBinaryPrompt() },
+        )
+    }
+
     if (showGoto && active != null) {
         GotoLineDialog(
             maxLine = active.doc.stats.lines,

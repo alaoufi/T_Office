@@ -48,6 +48,8 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var zipPrompt by mutableStateOf<ZipPrompt?>(null)
         private set
+    var binaryPrompt by mutableStateOf<BinaryPrompt?>(null)
+        private set
     var findState by mutableStateOf(FindState())
         private set
     var isBusy by mutableStateOf(false)
@@ -149,6 +151,13 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
                     return@launch
                 }
 
+                // Assess the file first: if it isn't text (image, archive, binary),
+                // warn instead of treating it as text / asking for an encoding.
+                if (EncodingDetector.looksBinary(sample)) {
+                    binaryPrompt = BinaryPrompt(uri, meta.name, meta.size)
+                    return@launch
+                }
+
                 val detection = EncodingDetector.detect(sample)
                 if (detection.needsConfirmation) {
                     encodingPrompt = EncodingPrompt(
@@ -176,6 +185,10 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
                 val bytes = withContext(Dispatchers.IO) {
                     ZipSupport.readEntryBytes(resolver, prompt.uri, entry.name)
                 }
+                if (EncodingDetector.looksBinary(bytes)) {
+                    emit("\"${entry.name}\" is not a text file.")
+                    return@launch
+                }
                 val detection = EncodingDetector.detect(bytes)
                 val enc = detection.encoding
                 val raw = withContext(Dispatchers.IO) { String(bytes, enc.charset()) }
@@ -200,6 +213,19 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun dismissZipPrompt() { zipPrompt = null }
+
+    /** User chose to open a non-text file anyway: load it losslessly as Latin-1
+     *  (1:1 byte mapping) so bytes are preserved for viewing. */
+    fun openBinaryAnyway() {
+        val p = binaryPrompt ?: return
+        binaryPrompt = null
+        viewModelScope.launch {
+            val enc = if (TextEncoding.ISO_8859_1.isAvailable()) TextEncoding.ISO_8859_1 else TextEncoding.UTF_8
+            loadFromUri(p.uri, p.displayName, p.size, enc)
+        }
+    }
+
+    fun cancelBinaryPrompt() { binaryPrompt = null }
 
     /** Confirm an encoding chosen in the manual dialog. */
     fun confirmEncoding(encoding: TextEncoding) {

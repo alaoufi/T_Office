@@ -37,6 +37,49 @@ object EncodingDetector {
     private const val CONFIDENT = 90
     private const val PROMPT_BELOW = 65
 
+    /**
+     * Heuristic check for whether [sample] is a *binary* (non-text) file such as
+     * an image, archive, font or executable. The app uses this to refuse to open
+     * such files as text (and to avoid uselessly prompting for an encoding).
+     *
+     * Text — including every supported legacy/Unicode encoding — passes; the
+     * giveaways for binary are NUL bytes (outside the regular pattern UTF-16/32
+     * produce) and a high proportion of non-text control bytes.
+     */
+    fun looksBinary(sample: ByteArray): Boolean {
+        if (sample.isEmpty()) return false
+        if (detectBom(sample) != null) return false           // BOM => a Unicode text file
+
+        // NUL / control analysis runs FIRST: NUL is a valid UTF-8 code point, so a
+        // binary blob of low bytes would otherwise pass a strict-UTF-8 check. Real
+        // text essentially never contains NUL or many C0 control bytes.
+        val n = sample.size
+        var nul = 0
+        var nulEven = 0
+        var control = 0
+        for (i in 0 until n) {
+            val b = sample[i].toInt() and 0xFF
+            when {
+                b == 0x00 -> { nul++; if (i % 2 == 0) nulEven++ }
+                b == 0x09 || b == 0x0A || b == 0x0D -> { /* tab/newline: fine */ }
+                b < 0x20 -> control++                           // other C0 controls
+                b == 0x7F -> control++
+            }
+        }
+        if (nul > 0) {
+            // UTF-16 without BOM: ASCII text leaves ~half the bytes as NUL, all on
+            // one parity (even or odd). Treat that regular pattern as text.
+            val onOneParity = nulEven == 0 || nulEven == nul
+            val roughlyHalf = nul * 2 in (n - n / 4)..(n + n / 4)
+            if (onOneParity && roughlyHalf && n >= 8) return false
+            return true                                          // stray NULs => binary
+        }
+        if (control.toDouble() / n > 0.10) return true          // dense controls => binary
+
+        // No NULs, few controls: it's text (any encoding, incl. valid UTF-8).
+        return false
+    }
+
     fun detect(sample: ByteArray): DetectionResult {
         if (sample.isEmpty()) {
             return DetectionResult(TextEncoding.UTF_8, 100, needsConfirmation = false)
