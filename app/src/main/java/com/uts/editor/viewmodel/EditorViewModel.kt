@@ -15,6 +15,7 @@ import com.uts.editor.data.EncodingDetector
 import com.uts.editor.data.FileIo
 import com.uts.editor.data.RecoveryStore
 import com.uts.editor.data.SettingsStore
+import com.uts.editor.data.WordExtractor
 import com.uts.editor.data.ZipSupport
 import com.uts.editor.model.DocumentState
 import com.uts.editor.model.LineEnding
@@ -132,6 +133,10 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
             isBusy = true
             try {
                 val meta = withContext(Dispatchers.IO) { FileIo.queryMeta(resolver, uri) }
+                if (WordExtractor.isWord(meta.name)) {
+                    openWord(uri, meta.name)
+                    return@launch
+                }
                 if (meta.name.endsWith(".zip", true)) {
                     val entries = withContext(Dispatchers.IO) { ZipSupport.listTextEntries(resolver, uri) }
                     zipPrompt = ZipPrompt(uri, entries)
@@ -213,6 +218,40 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun dismissZipPrompt() { zipPrompt = null }
+
+    /** Open a Word document by extracting its text (view & copy; not Word editing). */
+    private fun openWord(uri: Uri, name: String) {
+        viewModelScope.launch {
+            isBusy = true
+            try {
+                val text = withContext(Dispatchers.IO) { WordExtractor.extract(resolver, uri, name) }
+                if (text.isBlank()) {
+                    emit("No readable text found in \"$name\".")
+                    return@launch
+                }
+                val (normalized, ending) = normalizeIn(text)
+                // Present extracted text as a new editable .txt buffer (no source Uri,
+                // so saving goes through Save As to a real text file).
+                val baseName = name.substringBeforeLast('.') + ".txt"
+                val id = UUID.randomUUID().toString()
+                val doc = DocumentState(
+                    id = id, uri = null, displayName = baseName, encoding = TextEncoding.UTF_8,
+                    lineEnding = ending, language = SyntaxLanguage.PLAIN,
+                    loadMode = LoadMode.EDITABLE, isModified = true,
+                    stats = TextStats.of(normalized, normalized.toByteArray().size.toLong()),
+                )
+                val tab = EditorTab(doc, TextFieldValue(normalized)).also { it.savedSignature = -1 }
+                tabs.add(tab); activeIndex = tabs.lastIndex
+                if (name.lowercase().endsWith(".doc")) {
+                    emit("Text extracted from .doc (approximate — formatting not preserved).")
+                }
+            } catch (e: Exception) {
+                emit("Could not read Word file: ${e.message}")
+            } finally {
+                isBusy = false
+            }
+        }
+    }
 
     /** User chose to open a non-text file anyway: load it losslessly as Latin-1
      *  (1:1 byte mapping) so bytes are preserved for viewing. */
