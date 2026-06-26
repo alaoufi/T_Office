@@ -61,7 +61,8 @@ fun EditorArea(
     matches: List<IntRange>,
     currentMatch: Int,
     lineAligns: Map<Int, Int> = emptyMap(),
-    lineSpacing: Float = 1.6f,
+    lineSpacings: Map<Int, Float> = emptyMap(),
+    defaultSpacing: Float = 1.6f,
     textColorOverride: Int? = null,
     bgColorOverride: Int? = null,
     modifier: Modifier = Modifier,
@@ -86,7 +87,7 @@ fun EditorArea(
         TextStyle(
             fontFamily = editorFont,
             fontSize = fontSizeSp.sp,
-            lineHeight = (fontSizeSp * lineSpacing).sp,
+            lineHeight = (fontSizeSp * defaultSpacing).sp,
             color = textColor,
             textDirection = TextDirection.Content,
         )
@@ -95,33 +96,41 @@ fun EditorArea(
     // Pre-compute logical line start offsets for the gutter (cheap, on text change).
     val lineStarts = remember(value.text) { computeLineStarts(value.text) }
 
-    val transformation = remember(language, syntaxEnabled, syntaxColors, matches, currentMatch, lineAligns, lineStarts) {
+    val hasParaOverrides = lineAligns.isNotEmpty() || lineSpacings.isNotEmpty()
+    val transformation = remember(
+        language, syntaxEnabled, syntaxColors, matches, currentMatch,
+        lineAligns, lineSpacings, lineStarts, defaultSpacing, fontSizeSp,
+    ) {
         VisualTransformation { input ->
             val annotated = if (syntaxEnabled) {
                 SyntaxHighlighter.highlight(input.text, language, syntaxColors)
             } else {
                 androidx.compose.ui.text.AnnotatedString(input.text)
             }
+            val len = input.text.length
             val withStyles = buildAnnotatedString {
                 append(annotated)
-                // Per-paragraph alignment (applied only to lines the user aligned).
-                for ((lineIdx, a) in lineAligns) {
-                    if (a == 0 || lineIdx < 0 || lineIdx >= lineStarts.size) continue
-                    val start = lineStarts[lineIdx].coerceIn(0, input.text.length)
-                    val end = (if (lineIdx + 1 < lineStarts.size) lineStarts[lineIdx + 1] else input.text.length)
-                        .coerceIn(start, input.text.length)
-                    val ta = when (a) {
-                        1 -> TextAlign.Center
-                        2 -> TextAlign.End
-                        3 -> TextAlign.Justify
-                        else -> TextAlign.Start
+                // Tile EVERY paragraph with an explicit style so a styled line never
+                // bleeds into the lines after it. Capped for very large documents.
+                if (hasParaOverrides && lineStarts.size <= MAX_PARA_STYLE_LINES) {
+                    for (i in lineStarts.indices) {
+                        val start = lineStarts[i].coerceIn(0, len)
+                        val end = (if (i + 1 < lineStarts.size) lineStarts[i + 1] else len).coerceIn(start, len)
+                        if (start >= end && i != lineStarts.lastIndex) continue
+                        val ta = when (lineAligns[i] ?: 0) {
+                            1 -> TextAlign.Center
+                            2 -> TextAlign.End
+                            3 -> TextAlign.Justify
+                            else -> TextAlign.Start
+                        }
+                        val mult = lineSpacings[i] ?: defaultSpacing
+                        addStyle(ParagraphStyle(textAlign = ta, lineHeight = (fontSizeSp * mult).sp), start, end)
                     }
-                    addStyle(ParagraphStyle(textAlign = ta), start, end)
                 }
                 matches.forEachIndexed { i, r ->
                     val bg = if (i == currentMatch) currentBg else matchBg
-                    val start = r.first.coerceIn(0, input.text.length)
-                    val end = r.last.coerceIn(0, input.text.length)
+                    val start = r.first.coerceIn(0, len)
+                    val end = r.last.coerceIn(0, len)
                     if (start < end) addStyle(SpanStyle(background = bg), start, end)
                 }
             }
@@ -185,6 +194,7 @@ fun EditorArea(
 }
 
 private const val MAX_GUTTER_LINES = 50_000
+private const val MAX_PARA_STYLE_LINES = 5_000
 
 private fun Color.toArgb(): Int = android.graphics.Color.argb(
     (alpha * 255).toInt(), (red * 255).toInt(), (green * 255).toInt(), (blue * 255).toInt()

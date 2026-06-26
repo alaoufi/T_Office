@@ -448,6 +448,24 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         return tab.lineAligns[lineIndexOf(tab.field.text, tab.field.selection.start)] ?: 0
     }
 
+    /** Adjust line spacing for every paragraph touched by the selection/caret. */
+    fun adjustLineSpacing(delta: Float) {
+        val tab = active ?: return
+        val text = tab.field.text
+        val first = lineIndexOf(text, minOf(tab.field.selection.start, tab.field.selection.end))
+        val last = lineIndexOf(text, maxOf(tab.field.selection.start, tab.field.selection.end))
+        for (ln in first..last) {
+            val current = tab.lineSpacings[ln] ?: DEFAULT_LINE_SPACING
+            tab.lineSpacings[ln] = (current + delta).coerceIn(1.0f, 2.5f)
+        }
+    }
+
+    /** Spacing multiplier of the paragraph the caret is on. */
+    fun caretLineSpacing(): Float {
+        val tab = active ?: return DEFAULT_LINE_SPACING
+        return tab.lineSpacings[lineIndexOf(tab.field.text, tab.field.selection.start)] ?: DEFAULT_LINE_SPACING
+    }
+
     private fun lineIndexOf(text: String, offset: Int): Int {
         val safe = offset.coerceIn(0, text.length)
         var count = 0
@@ -777,6 +795,7 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     private fun emit(text: String) { _messages.tryEmit(UiMessage(text)) }
 
     companion object {
+        const val DEFAULT_LINE_SPACING = 1.6f
         private const val AUTOSAVE_INTERVAL_MS = 30_000L
         private const val LARGE_PAGE_LINES = 5_000
 

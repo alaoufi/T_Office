@@ -75,6 +75,9 @@ class EditorTab(initialDoc: DocumentState, initialField: TextFieldValue) {
      *  Display-only; not stored in the plain-text file. */
     val lineAligns = androidx.compose.runtime.mutableStateMapOf<Int, Int>()
 
+    /** Per-paragraph line-spacing multiplier (line index -> multiplier). Display-only. */
+    val lineSpacings = androidx.compose.runtime.mutableStateMapOf<Int, Float>()
+
     private val undoStack = ArrayDeque<TextFieldValue>()
     private val redoStack = ArrayDeque<TextFieldValue>()
     private val maxHistory = 200
