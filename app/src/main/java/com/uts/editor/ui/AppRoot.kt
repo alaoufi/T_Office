@@ -420,12 +420,18 @@ private fun CompactToolbar(
                     DropdownMenuItem(
                         enabled = false,
                         text = {
-                            Text(
-                                text = if (modified) "• $fileName" else fileName,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
+                            Column {
+                                Text(
+                                    text = if (modified) "• $fileName" else fileName,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Text(
+                                    "v${com.uts.editor.BuildConfig.VERSION_NAME}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            }
                         },
                         onClick = {},
                     )

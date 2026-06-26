@@ -79,6 +79,14 @@ fun EditorArea(
     val textColor = textColorOverride?.let { Color(it) } ?: MaterialTheme.colorScheme.onSurface
     val bgColor = bgColorOverride?.let { Color(it) }
 
+    // Pre-compute logical line start offsets for the gutter (cheap, on text change).
+    val lineStarts = remember(value.text) { computeLineStarts(value.text) }
+    // For small docs we give EVERY paragraph an explicit ParagraphStyle (alignment
+    // + line height). That is the single source of line height, so the base style
+    // must NOT set lineHeight — otherwise it overrides the per-paragraph value and
+    // spacing changes appear to affect all lines.
+    val tileParagraphs = lineStarts.size <= MAX_PARA_STYLE_LINES
+
     // Use a monospace face only for code; plain text (where Arabic documents
     // live) uses the default family, whose Arabic shaping is correct on all
     // devices — the system monospace font garbles Arabic on some OEM ROMs.
@@ -87,19 +95,16 @@ fun EditorArea(
         TextStyle(
             fontFamily = editorFont,
             fontSize = fontSizeSp.sp,
-            lineHeight = (fontSizeSp * defaultSpacing).sp,
+            lineHeight = if (tileParagraphs) androidx.compose.ui.unit.TextUnit.Unspecified
+            else (fontSizeSp * defaultSpacing).sp,
             color = textColor,
             textDirection = TextDirection.Content,
         )
     )
 
-    // Pre-compute logical line start offsets for the gutter (cheap, on text change).
-    val lineStarts = remember(value.text) { computeLineStarts(value.text) }
-
-    val hasParaOverrides = lineAligns.isNotEmpty() || lineSpacings.isNotEmpty()
     val transformation = remember(
         language, syntaxEnabled, syntaxColors, matches, currentMatch,
-        lineAligns, lineSpacings, lineStarts, defaultSpacing, fontSizeSp,
+        lineAligns, lineSpacings, lineStarts, defaultSpacing, fontSizeSp, tileParagraphs,
     ) {
         VisualTransformation { input ->
             val annotated = if (syntaxEnabled) {
@@ -110,9 +115,9 @@ fun EditorArea(
             val len = input.text.length
             val withStyles = buildAnnotatedString {
                 append(annotated)
-                // Tile EVERY paragraph with an explicit style so a styled line never
-                // bleeds into the lines after it. Capped for very large documents.
-                if (hasParaOverrides && lineStarts.size <= MAX_PARA_STYLE_LINES) {
+                // Give EVERY paragraph its own explicit style so per-line alignment
+                // and spacing never bleed into neighbouring lines.
+                if (tileParagraphs) {
                     for (i in lineStarts.indices) {
                         val start = lineStarts[i].coerceIn(0, len)
                         val end = (if (i + 1 < lineStarts.size) lineStarts[i + 1] else len).coerceIn(start, len)
