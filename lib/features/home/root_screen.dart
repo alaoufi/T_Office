@@ -4,13 +4,11 @@ import 'package:provider/provider.dart';
 import '../../services/backup_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/sync/sync_service.dart';
-import '../editor/rich_text_field.dart';
 import '../reminders/reminders_provider.dart';
+import '../reminders/reminders_screen.dart';
 import '../settings/settings_provider.dart';
-import 'home_screen.dart';
-import 'notes_provider.dart';
 
-/// الجذر: يهيّئ البيانات ثم يعرض الصفحة الرئيسية (التي تحوي القائمة الجانبية).
+/// الجذر: يهيّئ البيانات ثم يعرض شاشة التنبيهات (التي تحوي القائمة الجانبية).
 ///
 /// يراقب دورة حياة التطبيق ليُجري **مزامنة سحابية تلقائية** عند الإقلاع وكلّما
 /// عاد التطبيق إلى الواجهة (resume)، مع إظهار «تمت المزامنة ✓».
@@ -30,19 +28,16 @@ class _RootScreenState extends State<RootScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<NotesProvider>().init();
       context.read<RemindersProvider>().refresh();
       // إن أُقلع التطبيق من منبّه حرج (وهو مغلق) ⇒ أظهر شاشة المنبّه فورًا.
       NotificationService.instance.handleLaunch();
-      // شبكة أمان ضدّ فقدان الملاحظات: نُفعّل النسخ التلقائي اليومي افتراضيًا عند
-      // أول تشغيل (مرّة واحدة)، ثم ننشئ نسخة إن حان موعدها — كلّه في الخلفية.
+      // شبكة أمان: نُفعّل النسخ التلقائي اليومي افتراضيًا عند أول تشغيل (مرّة
+      // واحدة)، ثم ننشئ نسخة إن حان موعدها — كلّه في الخلفية.
       BackupService.instance
           .ensureDefaultAutoBackup()
           .then((_) => BackupService.instance.maybeRunAutoBackup());
       // مزامنة أولى عند الإقلاع (تُعامَل كـ«فتح»).
       _autoSync(SyncTrigger.open);
-      // أعِد عرض الملاحظات المثبّتة في الإشعارات (تختفي عند إغلاق التطبيق).
-      _reassertPinnedNotes();
       // حدّث موجز الصباح بعدد التذكيرات الحاليّ.
       _refreshBriefing();
     });
@@ -65,27 +60,6 @@ class _RootScreenState extends State<RootScreen> with WidgetsBindingObserver {
         reminderCount: count,
       );
     } catch (_) {}
-  }
-
-  /// يعيد إظهار إشعارات الملاحظات المثبّتة بعد إعادة تشغيل التطبيق، ويُنظّف
-  /// المثبّتة المحذوفة/المؤرشفة.
-  Future<void> _reassertPinnedNotes() async {
-    try {
-      final svc = NotificationService.instance;
-      final ids = await svc.pinnedIds();
-      if (ids.isEmpty || !mounted) return;
-      final repo = context.read<NotesProvider>().notes;
-      for (final id in ids) {
-        final note = await repo.getNote(id);
-        if (note == null || note.isDeleted || note.isArchived) {
-          await svc.cancelPinnedNote(id);
-          continue;
-        }
-        await svc.showPinnedNote(id, note.title, richToPlainText(note.content));
-      }
-    } catch (_) {
-      // لا يجب أن تُعطّل بدء التطبيق.
-    }
   }
 
   @override
@@ -122,18 +96,16 @@ class _RootScreenState extends State<RootScreen> with WidgetsBindingObserver {
     _syncing = true;
     if (!silent) {
       svc.status.value =
-          const SyncStatus(SyncUi.syncing, 'جارٍ مزامنة ملاحظاتك…');
+          const SyncStatus(SyncUi.syncing, 'جارٍ مزامنة تنبيهاتك…');
     }
 
     final r = await svc.syncNow();
     _lastSyncDone = DateTime.now();
     _syncing = false;
 
-    // حدّث القائمة بهدوء عند النجاح.
+    // حدّث قائمة التنبيهات بهدوء عند النجاح.
     if (r.ok && mounted) {
-      final notes = context.read<NotesProvider>();
-      await notes.loadCategories();
-      await notes.refresh();
+      await context.read<RemindersProvider>().refresh();
     }
 
     if (silent) return; // الوضع الصامت: لا شريط ولا إشعار مرئيّ.
@@ -150,5 +122,5 @@ class _RootScreenState extends State<RootScreen> with WidgetsBindingObserver {
   }
 
   @override
-  Widget build(BuildContext context) => const HomeScreen();
+  Widget build(BuildContext context) => const RemindersScreen();
 }

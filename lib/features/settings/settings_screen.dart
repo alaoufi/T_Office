@@ -15,12 +15,9 @@ import '../../widgets/paper_background.dart';
 import '../home/notes_provider.dart';
 import '../backup/backup_screen.dart';
 import '../backup/daily_backup_switch.dart';
-import '../categories/manage_categories_screen.dart';
 import '../reminders/reminders_screen.dart';
 import '../security/security_settings_screen.dart';
 import '../../services/update_service.dart';
-import '../trash/archive_screen.dart';
-import '../trash/trash_screen.dart';
 import 'settings_provider.dart';
 
 /// شاشة الإعدادات — تصميم عصري مجمّع: بطاقات بارزة (ثلاثية الأبعاد) قابلة للطيّ،
@@ -115,20 +112,6 @@ class SettingsScreen extends StatelessWidget {
                     _nav(context, Icons.backup_outlined,
                         'النسخ الاحتياطي والمشاركة السحابية',
                         const BackupScreen()),
-                  ],
-                ),
-                _groupCard(
-                  context,
-                  icon: Icons.folder_outlined,
-                  title: 'التنظيم',
-                  children: [
-                    _nav(context, Icons.category_outlined,
-                        s.t('manage_categories'),
-                        const ManageCategoriesScreen()),
-                    _nav(context, Icons.archive_outlined, s.t('archived'),
-                        const ArchiveScreen()),
-                    _nav(context, Icons.delete_outline, s.t('trash'),
-                        const TrashScreen()),
                   ],
                 ),
                 _groupCard(

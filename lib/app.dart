@@ -1,7 +1,6 @@
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:flutter_quill/flutter_quill.dart';
 import 'package:provider/provider.dart';
 
 import 'core/l10n/app_strings.dart';
@@ -41,9 +40,7 @@ class MudhakkaratiApp extends StatelessWidget {
             GlobalMaterialLocalizations.delegate,
             GlobalWidgetsLocalizations.delegate,
             GlobalCupertinoLocalizations.delegate,
-            FlutterQuillLocalizations.delegate,
           ],
-          // ملاحظة: FlutterQuillLocalizations.delegate ثابت (const) لذا تبقى القائمة const.
           // ضمان اتجاه RTL للعربية.
           builder: (context, child) {
             final isRtl = S.rtlLanguages.contains(settings.locale.languageCode);

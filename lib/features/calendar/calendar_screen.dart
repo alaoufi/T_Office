@@ -6,11 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:table_calendar/table_calendar.dart';
 
 import '../../core/l10n/app_strings.dart';
-import '../../data/models/note.dart';
 import '../../widgets/ui_kit.dart';
-import '../editor/note_editor_screen.dart';
-import '../editor/rich_text_field.dart';
-import '../home/notes_provider.dart';
 import '../reminders/reminders_provider.dart';
 
 class CalendarScreen extends StatefulWidget {
@@ -25,15 +21,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
   DateTime _selected = DateTime.now();
   bool _hijri = false;
 
-  List<Note> _all = [];
-  bool _loading = true;
+  // قائمة التنبيهات الحاليّة (تُحدَّث من المزوّد في كل بناء).
+  List<ReminderView> _reminders = [];
 
   static const _kHijriPref = 'calendar_hijri'; // تذكّر اختيار التقويم
 
   @override
   void initState() {
     super.initState();
-    _loadNotes();
     _loadHijriPref();
   }
 
@@ -64,22 +59,18 @@ class _CalendarScreenState extends State<CalendarScreen> {
     setState(() => _focused = HijriCalendar().hijriToGregorian(y, m, 1));
   }
 
-  Future<void> _loadNotes() async {
-    final provider = context.read<NotesProvider>();
-    final notes = await provider.notes.getNotes();
-    if (mounted) {
-      setState(() {
-        _all = notes;
-        _loading = false;
-      });
-    }
-  }
-
   bool _sameDay(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
 
-  List<Note> _notesFor(DateTime day) =>
-      _all.where((n) => _sameDay(n.createdAt, day)).toList();
+  /// تنبيهات يومٍ معيّن (بحسب وقت التنبيه).
+  List<ReminderView> _remindersFor(DateTime day) =>
+      _reminders.where((v) => _sameDay(v.reminder.time, day)).toList();
+
+  /// عنوان عرض التنبيه: العنوان إن وُجد، وإلا «تنبيه».
+  String _reminderLabel(ReminderView v) {
+    final t = v.reminder.title?.trim() ?? '';
+    return t.isEmpty ? 'تنبيه' : t;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -87,12 +78,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
     // أسماء الشهور/الأيام الهجريّة حسب لغة الواجهة.
     HijriCalendar.setLocal(s.isArabic ? 'ar' : 'en');
     final reminders = context.watch<RemindersProvider>();
-    // ملاحظات اليوم مرتّبة بوقت الإنشاء (الأقدم أولًا)، والتذكيرات بوقتها.
-    final dayNotes = _notesFor(_selected)
-      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
-    final dayReminders = reminders.items
-        .where((v) => _sameDay(v.reminder.time, _selected))
-        .toList()
+    _reminders = reminders.items;
+    // تنبيهات اليوم المحدَّد مرتّبة بوقتها.
+    final dayReminders = _remindersFor(_selected)
       ..sort((a, b) => a.reminder.time.compareTo(b.reminder.time));
 
     return Scaffold(
@@ -110,82 +98,80 @@ class _CalendarScreenState extends State<CalendarScreen> {
           ),
         ],
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _loadNotes,
-              child: ListView(
-                padding: const EdgeInsets.only(top: 8, bottom: 24),
-                children: [
-                  // بطاقة التقويم: هجريّ (شبكة مخصّصة) أو ميلاديّ (TableCalendar).
-                  AppCard(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: _hijri
-                        ? _hijriCalendar(context, s)
-                        : TableCalendar<Note>(
-                            locale: s.isArabic ? 'ar' : 'en',
-                            firstDay: DateTime(2015),
-                            lastDay: DateTime(2100),
-                            focusedDay: _focused,
-                            selectedDayPredicate: (d) => _sameDay(d, _selected),
-                            eventLoader: _notesFor,
-                            startingDayOfWeek: StartingDayOfWeek.saturday,
-                            calendarFormat: CalendarFormat.month,
-                            availableCalendarFormats: const {
-                              CalendarFormat.month: ''
-                            },
-                            onDaySelected: (selected, focused) {
-                              setState(() {
-                                _selected = selected;
-                                _focused = focused;
-                              });
-                            },
-                            calendarStyle: CalendarStyle(
-                              markerDecoration: BoxDecoration(
-                                color: Theme.of(context).colorScheme.primary,
-                                shape: BoxShape.circle,
-                              ),
-                              todayDecoration: BoxDecoration(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .primaryContainer,
-                                shape: BoxShape.circle,
-                              ),
-                              selectedDecoration: BoxDecoration(
-                                color: Theme.of(context).colorScheme.primary,
-                                shape: BoxShape.circle,
-                              ),
+      body: RefreshIndicator(
+        onRefresh: () => reminders.refresh(),
+        child: ListView(
+          padding: const EdgeInsets.only(top: 8, bottom: 24),
+          children: [
+            // بطاقة التقويم: هجريّ (شبكة مخصّصة) أو ميلاديّ (TableCalendar).
+            AppCard(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: _hijri
+                  ? _hijriCalendar(context, s)
+                  : TableCalendar<ReminderView>(
+                      locale: s.isArabic ? 'ar' : 'en',
+                      firstDay: DateTime(2015),
+                      lastDay: DateTime(2100),
+                      focusedDay: _focused,
+                      selectedDayPredicate: (d) => _sameDay(d, _selected),
+                      eventLoader: _remindersFor,
+                      startingDayOfWeek: StartingDayOfWeek.saturday,
+                      calendarFormat: CalendarFormat.month,
+                      availableCalendarFormats: const {
+                        CalendarFormat.month: ''
+                      },
+                      onDaySelected: (selected, focused) {
+                        setState(() {
+                          _selected = selected;
+                          _focused = focused;
+                        });
+                      },
+                      calendarStyle: CalendarStyle(
+                        markerDecoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.primary,
+                          shape: BoxShape.circle,
+                        ),
+                        todayDecoration: BoxDecoration(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .primaryContainer,
+                          shape: BoxShape.circle,
+                        ),
+                        selectedDecoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.primary,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      // تلوين خفيف لأيام بها تنبيهات (غير اليوم/المحدَّد).
+                      calendarBuilders: CalendarBuilders<ReminderView>(
+                        defaultBuilder: (ctx, day, _) {
+                          if (_remindersFor(day).isEmpty) return null;
+                          final scheme = Theme.of(ctx).colorScheme;
+                          return Container(
+                            margin: const EdgeInsets.all(6),
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: scheme.primaryContainer
+                                  .withOpacity(0.45),
+                              shape: BoxShape.circle,
                             ),
-                            // تلوين خفيف لأيام بها ملاحظات (غير اليوم/المحدَّد).
-                            calendarBuilders: CalendarBuilders<Note>(
-                              defaultBuilder: (ctx, day, _) {
-                                if (_notesFor(day).isEmpty) return null;
-                                final scheme = Theme.of(ctx).colorScheme;
-                                return Container(
-                                  margin: const EdgeInsets.all(6),
-                                  alignment: Alignment.center,
-                                  decoration: BoxDecoration(
-                                    color: scheme.primaryContainer
-                                        .withOpacity(0.45),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: Text('${day.day}'),
-                                );
-                              },
-                            ),
-                          ),
-                  ),
-                  // بطاقة تفاصيل اليوم: التاريخ + تذكيرات + ملاحظات (مرتّبة، بخلفية).
-                  _dayCard(context, s, dayReminders, dayNotes),
-                ],
-              ),
+                            child: Text('${day.day}'),
+                          );
+                        },
+                      ),
+                    ),
             ),
+            // بطاقة تفاصيل اليوم: التاريخ + تذكيرات اليوم.
+            _dayCard(context, s, dayReminders),
+          ],
+        ),
+      ),
     );
   }
 
   /// شبكة تقويم **هجريّة كاملة**: رأس باسم الشهر الهجريّ + تنقّل بالشهور الهجريّة،
-  /// وخلايا بأرقام الأيام الهجريّة (مع علامة الملاحظات وتمييز اليوم/المحدَّد).
-  /// كل خليّة مرتبطة بتاريخها الميلاديّ المقابل كي تعمل الملاحظات والاختيار كالعادة.
+  /// وخلايا بأرقام الأيام الهجريّة (مع علامة التنبيهات وتمييز اليوم/المحدَّد).
+  /// كل خليّة مرتبطة بتاريخها الميلاديّ المقابل كي تعمل التنبيهات والاختيار كالعادة.
   Widget _hijriCalendar(BuildContext context, S s) {
     final scheme = Theme.of(context).colorScheme;
     final hf = HijriCalendar.fromDate(_focused);
@@ -210,7 +196,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
           .add(Duration(days: d - 1));
       final isToday = _sameDay(greg, now);
       final isSel = _sameDay(greg, _selected);
-      final hasNotes = _notesFor(greg).isNotEmpty;
+      final hasItems = _remindersFor(greg).isNotEmpty;
       cells.add(GestureDetector(
         onTap: () => setState(() {
           _selected = greg;
@@ -224,7 +210,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 ? scheme.primary
                 : isToday
                     ? scheme.primaryContainer
-                    : hasNotes
+                    : hasItems
                         ? scheme.primaryContainer.withOpacity(0.45)
                         : null,
           ),
@@ -235,7 +221,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   style: TextStyle(
                       color: isSel ? scheme.onPrimary : null,
                       fontWeight: isToday || isSel ? FontWeight.bold : null)),
-              if (hasNotes)
+              if (hasItems)
                 Container(
                   width: 5,
                   height: 5,
@@ -307,16 +293,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
-  /// عنوان عرض الملاحظة: العنوان إن وُجد، وإلا **أوّل ثلاث كلمات** من نصّها العاديّ
-  /// (نفكّ Delta JSON فلا تظهر رموز التنسيق)، وإلا «بدون عنوان».
-  String _noteLabel(Note n) {
-    final t = n.title.trim();
-    if (t.isNotEmpty) return t;
-    final plain = richToPlainText(n.content).trim();
-    if (plain.isEmpty) return 'بدون عنوان';
-    return plain.split(RegExp(r'\s+')).take(3).join(' ');
-  }
-
   Widget _dot(BuildContext context, Color color, {double size = 14}) => Container(
         width: size,
         height: size,
@@ -344,10 +320,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
-  /// بطاقة تفاصيل اليوم المحدَّد: رأس التاريخ (هجريّ/ميلاديّ) + التذكيرات +
-  /// الملاحظات — مرتّبة بخلفيّة بطاقة، وكل عنصر بعنوانه الواضح ونقطة لونه.
-  Widget _dayCard(BuildContext context, S s, List<ReminderView> dayReminders,
-      List<Note> dayNotes) {
+  /// بطاقة تفاصيل اليوم المحدَّد: رأس التاريخ (هجريّ/ميلاديّ) + تنبيهات اليوم.
+  Widget _dayCard(
+      BuildContext context, S s, List<ReminderView> dayReminders) {
     final scheme = Theme.of(context).colorScheme;
     final greg = DateFormat('EEEE، d MMMM yyyy', s.isArabic ? 'ar' : 'en')
         .format(_selected);
@@ -393,58 +368,27 @@ class _CalendarScreenState extends State<CalendarScreen> {
           ),
           const Divider(height: 1),
 
-          // التذكيرات.
-          if (dayReminders.isNotEmpty) ...[
-            _sectionLabel(context, Icons.alarm, s.t('reminders')),
+          // تنبيهات اليوم.
+          _sectionLabel(context, Icons.alarm, s.t('reminders')),
+          if (dayReminders.isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Center(
+                child: Text(s.t('no_reminders'),
+                    style: TextStyle(color: scheme.outline)),
+              ),
+            )
+          else
             ...dayReminders.map((v) => ListTile(
                   dense: true,
                   leading: _dot(context, scheme.tertiary),
                   title: Text(
-                    v.note != null ? _noteLabel(v.note!) : 'تذكير',
+                    _reminderLabel(v),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                   trailing: Text(DateFormat('HH:mm').format(v.reminder.time),
                       style: Theme.of(context).textTheme.bodySmall),
-                  onTap: v.note != null
-                      ? () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) =>
-                                  NoteEditorScreen(noteId: v.note!.id),
-                            ),
-                          )
-                      : null,
-                )),
-            const Divider(height: 1),
-          ],
-
-          // الملاحظات.
-          _sectionLabel(context, Icons.sticky_note_2_outlined, s.t('nav_notes')),
-          if (dayNotes.isEmpty)
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Center(
-                child: Text(s.t('no_notes_day'),
-                    style: TextStyle(color: scheme.outline)),
-              ),
-            )
-          else
-            ...dayNotes.map((n) => ListTile(
-                  dense: true,
-                  leading: _dot(context,
-                      n.color != null ? Color(n.color!) : scheme.primary),
-                  title: Text(
-                    _noteLabel(n),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => NoteEditorScreen(noteId: n.id),
-                    ),
-                  ),
                 )),
           const SizedBox(height: 6),
         ],

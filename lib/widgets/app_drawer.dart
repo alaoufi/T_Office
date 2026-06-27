@@ -3,17 +3,18 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 import '../core/l10n/app_strings.dart';
 import '../features/backup/backup_screen.dart';
-import '../features/categories/manage_categories_screen.dart';
-import '../features/cleanup/cleanup_screen.dart';
+import '../features/calendar/calendar_screen.dart';
 import '../features/help/help_guide_screen.dart';
-import '../features/security/note_unlock.dart';
-import '../features/security/secret_notes_screen.dart';
+import '../features/meds/medication_screen.dart';
+import '../features/reminders/notification_center_screen.dart';
+import '../features/reminders/reliability_test_screen.dart';
+import '../features/reminders/reminder_defaults_screen.dart';
 import '../features/security/security_settings_screen.dart';
 import '../features/settings/settings_screen.dart';
-import '../features/trash/archive_screen.dart';
-import '../features/trash/trash_screen.dart';
+import '../features/sounds/sound_library_screen.dart';
+import '../features/sync/cloud_sync_screen.dart';
 
-/// القائمة الجانبية الرئيسية (مستوحاة من تطبيقات المذكرات الاحترافية).
+/// القائمة الجانبية الرئيسية لتطبيق التنبيهات (تنبيهات/أدوية/تقويم + الخدمات).
 class AppDrawer extends StatelessWidget {
   const AppDrawer({super.key});
 
@@ -27,15 +28,6 @@ class AppDrawer extends StatelessWidget {
       Navigator.push(context, MaterialPageRoute(builder: (_) => page));
     }
 
-    Future<void> goSecret() async {
-      Navigator.pop(context);
-      final ok = await ensureUnlocked(context);
-      if (ok && context.mounted) {
-        Navigator.push(context,
-            MaterialPageRoute(builder: (_) => const SecretNotesScreen()));
-      }
-    }
-
     return Drawer(
       child: SafeArea(
         child: ListView(
@@ -47,10 +39,10 @@ class AppDrawer extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  // الشعار + زرّ رجوع/إغلاق واضح للقائمة الجانبية (نفس الصفّ).
+                  // الشعار + زرّ إغلاق واضح للقائمة الجانبية (نفس الصفّ).
                   Row(
                     children: [
-                      Icon(Icons.sticky_note_2,
+                      Icon(Icons.notifications_active,
                           color: scheme.onPrimary, size: 40),
                       const Spacer(),
                       IconButton(
@@ -96,7 +88,7 @@ class AppDrawer extends StatelessWidget {
                 ],
               ),
             ),
-            // دليل الاستخدام بارز أعلى القائمة (يفتح حسب اللغة المختارة).
+            // دليل الاستخدام بارز أعلى القائمة.
             ListTile(
               leading: Icon(Icons.auto_stories, color: scheme.primary),
               title: Text(s.t('user_guide'),
@@ -105,32 +97,37 @@ class AppDrawer extends StatelessWidget {
               onTap: () => go(const HelpGuideScreen()),
             ),
             const Divider(height: 1),
-            // القائمة الجانبية مخصّصة للإعدادات والتحكّم والإدارة.
-            // (التنبيهات/التقويم/البحث في الهيدر، والخدمات السريعة في قائمة ⋮.)
-            // 1) الإدارة والتنظيم.
-            _group(context, Icons.tune, s.t('group_manage'),
+            // 1) التنبيهات والمنبّهات.
+            _group(context, Icons.alarm, s.t('reminders'),
                 initiallyExpanded: true, children: [
-              _tile(context, Icons.category_outlined, s.t('manage_categories'),
-                  () => go(const ManageCategoriesScreen())),
+              _tile(context, Icons.medication_outlined, s.t('med_mode'),
+                  () => go(const MedicationScreen())),
+              _tile(context, Icons.calendar_month_outlined, s.t('calendar'),
+                  () => go(const CalendarScreen())),
+              _tile(context, Icons.notifications_active_outlined,
+                  s.t('notif_center'),
+                  () => go(const NotificationCenterScreen())),
+              _tile(context, Icons.library_music_outlined, s.t('sound_library'),
+                  () => go(const SoundLibraryScreen())),
+              _tile(context, Icons.tune, s.t('reminder_defaults'),
+                  () => go(const ReminderDefaultsScreen())),
+              _tile(context, Icons.health_and_safety_outlined,
+                  s.t('reliability_test'),
+                  () => go(const ReliabilityTestScreen())),
             ]),
             // 2) الأمان.
             _group(context, Icons.shield_outlined, s.t('security'),
                 children: [
-              _tile(context, Icons.lock, s.t('secret_notes'), goSecret),
               _tile(context, Icons.security, s.t('security_lock'),
                   () => go(const SecuritySettingsScreen())),
             ]),
-            // 3) النسخ والصيانة.
+            // 3) النسخ والمزامنة.
             _group(context, Icons.backup_outlined, s.t('group_backup'),
                 children: [
               _tile(context, Icons.backup_outlined, s.t('backup'),
                   () => go(const BackupScreen())),
-              _tile(context, Icons.archive_outlined, s.t('archived'),
-                  () => go(const ArchiveScreen())),
-              _tile(context, Icons.delete_outline, s.t('trash'),
-                  () => go(const TrashScreen())),
-              _tile(context, Icons.cleaning_services_outlined, s.t('cleanup'),
-                  () => go(const CleanupScreen())),
+              _tile(context, Icons.cloud_sync_outlined, s.t('cloud_sync'),
+                  () => go(const CloudSyncScreen())),
             ]),
             const Divider(),
             _tile(context, Icons.settings_outlined, s.t('settings'),

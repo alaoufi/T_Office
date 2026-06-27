@@ -8,10 +8,10 @@ import '../../core/time/hijri_recurrence.dart';
 import '../../data/models/enums.dart';
 import '../../data/models/reminder.dart';
 import '../../services/med_occurrences.dart';
+import '../../widgets/app_drawer.dart';
 import '../../widgets/confirm_dialog.dart';
+import '../../widgets/reminder_attachments.dart';
 import '../../widgets/ui_kit.dart';
-import '../editor/editor_attachments.dart';
-import '../editor/note_editor_screen.dart';
 import '../meds/medication_screen.dart';
 import '../sounds/sound_library_screen.dart';
 import 'notification_center_screen.dart';
@@ -39,10 +39,9 @@ class RemindersScreen extends StatelessWidget {
     final provider = context.watch<RemindersProvider>();
     final standalone =
         provider.items.where((v) => v.reminder.isStandalone).toList();
-    final noteLinked =
-        provider.items.where((v) => !v.reminder.isStandalone).toList();
 
     return Scaffold(
+      drawer: const AppDrawer(),
       appBar: gradientAppBar(context, s.t('reminders'), actions: [
         PopupMenuButton<String>(
           icon: const Icon(Icons.settings),
@@ -90,14 +89,8 @@ class RemindersScreen extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(0, 8, 0, 90),
               children: [
                 _nextBanner(context, provider.items),
-                if (standalone.isNotEmpty) ...[
-                  _header(context, '⏰ تنبيهات مستقلّة'),
+                if (standalone.isNotEmpty)
                   for (final v in standalone) _tile(context, s, provider, v),
-                ],
-                if (noteLinked.isNotEmpty) ...[
-                  _header(context, '📝 تنبيهات الملاحظات'),
-                  for (final v in noteLinked) _tile(context, s, provider, v),
-                ],
               ],
             ),
     );
@@ -192,12 +185,7 @@ class RemindersScreen extends StatelessWidget {
     return AppCard(
       onTap: r.isStandalone
           ? () => showStandaloneReminderDialog(context, existing: r)
-          : () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => NoteEditorScreen(noteId: note!.id),
-                ),
-              ),
+          : null,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 8, 6, 8),
         child: Row(

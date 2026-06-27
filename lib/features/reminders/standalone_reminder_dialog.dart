@@ -8,7 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/l10n/app_strings.dart';
 import '../../widgets/confirm_dialog.dart';
 import '../../data/models/enums.dart';
-import '../editor/editor_attachments.dart';
+import '../../widgets/reminder_attachments.dart';
 import 'alarm_permissions.dart';
 import '../../data/models/reminder.dart';
 import '../../services/ringtone_picker.dart';

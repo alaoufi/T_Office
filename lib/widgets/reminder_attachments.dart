@@ -7,8 +7,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:record/record.dart';
 
-import '../../core/l10n/app_strings.dart';
-import '../../services/file_service.dart';
+import '../core/l10n/app_strings.dart';
+import '../services/file_service.dart';
 
 /// أدوات إرفاق الوسائط (صورة، PDF، فتح ملف).
 class EditorAttachments {
