@@ -23,6 +23,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -616,65 +618,72 @@ fun EditorScreen(
 
                     // اتجاه المسطرة يتبع اتجاه الصفحة (ثابت لا يتأثر بالتنسيق)
                     val rulerRtl = page.rtlPage
-                    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                    // عرض كسول: لا تُركَّب/تُقاس إلا الكتل المرئية — يمنع تجمّد المستندات الكبيرة
+                    LazyColumn(Modifier.fillMaxSize()) {
                         if (showRuler) {
-                            Row {
-                                Spacer(Modifier.width(rulerThick + gap))
-                                HorizontalRuler(
-                                    pageWidthPt = page.pageWidthPt,
-                                    marginLeftPt = page.marginLeftPt,
-                                    marginRightPt = page.marginRightPt,
-                                    scale = scale,
-                                    rtl = rulerRtl,
-                                    onChange = { l, r -> page = page.copy(marginLeftPt = l, marginRightPt = r) },
-                                )
+                            item(key = "hruler") {
+                                Row {
+                                    Spacer(Modifier.width(rulerThick + gap))
+                                    HorizontalRuler(
+                                        pageWidthPt = page.pageWidthPt,
+                                        marginLeftPt = page.marginLeftPt,
+                                        marginRightPt = page.marginRightPt,
+                                        scale = scale,
+                                        rtl = rulerRtl,
+                                        onChange = { l, r -> page = page.copy(marginLeftPt = l, marginRightPt = r) },
+                                    )
+                                }
+                                Spacer(Modifier.height(2.dp))
                             }
-                            Spacer(Modifier.height(2.dp))
                         }
-                        Row {
-                            if (showRuler) {
-                                VerticalRuler(
-                                    pageHeightPt = page.pageHeightPt,
-                                    heightDp = sheetHeightDp,
-                                    marginTopPt = page.marginTopPt,
-                                    marginBottomPt = page.marginBottomPt,
+                        item(key = "sheet") {
+                            Row {
+                                if (showRuler) {
+                                    VerticalRuler(
+                                        pageHeightPt = page.pageHeightPt,
+                                        heightDp = sheetHeightDp,
+                                        marginTopPt = page.marginTopPt,
+                                        marginBottomPt = page.marginBottomPt,
+                                        scale = scale,
+                                        onChange = { t, b -> page = page.copy(marginTopPt = t, marginBottomPt = b) },
+                                    )
+                                    Spacer(Modifier.width(gap))
+                                }
+                                PageSheet(
+                                    widthDp = sheetWidthDp,
+                                    pageHeightDp = pageHeightDp,
+                                    pageCount = pageCount,
+                                    page = page,
                                     scale = scale,
-                                    onChange = { t, b -> page = page.copy(marginTopPt = t, marginBottomPt = b) },
+                                    value = value,
+                                    onValueChange = { update(it) },
+                                    header = header,
+                                    onHeaderChange = { header = it },
+                                    footer = footer,
+                                    onFooterChange = { footer = it },
+                                    hfEditing = hfEditing,
+                                    onStartEditHF = { field -> hfEditing = field; focusTarget = field },
+                                    onBodyFocus = { focusTarget = EditField.Body; hfEditing = null; focusedExtra = -1 },
+                                    onSheetHeight = { sheetHeightPx = it },
                                 )
-                                Spacer(Modifier.width(gap))
                             }
-                            PageSheet(
-                                widthDp = sheetWidthDp,
-                                pageHeightDp = pageHeightDp,
-                                pageCount = pageCount,
-                                page = page,
-                                scale = scale,
-                                value = value,
-                                onValueChange = { update(it) },
-                                header = header,
-                                onHeaderChange = { header = it },
-                                footer = footer,
-                                onFooterChange = { footer = it },
-                                hfEditing = hfEditing,
-                                onStartEditHF = { field -> hfEditing = field; focusTarget = field },
-                                onBodyFocus = { focusTarget = EditField.Body; hfEditing = null; focusedExtra = -1 },
-                                onSheetHeight = { sheetHeightPx = it },
+                        }
+                        // كتل ما بعد المتن بالترتيب (نص/جدول/صورة) — كلٌّ عنصر كسول مستقل
+                        items(extraBlocks.size, key = { "block_$it" }) { i ->
+                            BlockItem(
+                                block = extraBlocks[i],
+                                onTextChange = { v -> extraBlocks[i] = TextBlockUi(v) },
+                                onTextFocus = { focusedExtra = i; focusTarget = EditField.Body; hfEditing = null },
+                                onTableChange = { t -> extraBlocks[i] = TableBlockUi(t) },
+                                onImageResize = { im -> extraBlocks[i] = ImageBlockUi(im) },
+                                onDelete = {
+                                    (extraBlocks[i] as? ImageBlockUi)?.let { ImageStore.delete(it.img.path) }
+                                    extraBlocks.removeAt(i)
+                                    if (focusedExtra >= extraBlocks.size) focusedExtra = -1
+                                },
                             )
                         }
-                        // كتل ما بعد المتن بالترتيب (نص/جدول/صورة) — المحرّك الكتلي
-                        DocumentBlocks(
-                            blocks = extraBlocks,
-                            onTextChange = { i, v -> extraBlocks[i] = TextBlockUi(v) },
-                            onTextFocus = { i -> focusedExtra = i; focusTarget = EditField.Body; hfEditing = null },
-                            onTableChange = { i, t -> extraBlocks[i] = TableBlockUi(t) },
-                            onImageResize = { i, im -> extraBlocks[i] = ImageBlockUi(im) },
-                            onDelete = { i ->
-                                (extraBlocks[i] as? ImageBlockUi)?.let { ImageStore.delete(it.img.path) }
-                                extraBlocks.removeAt(i)
-                                if (focusedExtra >= extraBlocks.size) focusedExtra = -1
-                            },
-                        )
-                        Spacer(Modifier.height(24.dp))
+                        item(key = "tail") { Spacer(Modifier.height(24.dp)) }
                     }
                   }
                 }
@@ -1249,39 +1258,35 @@ private fun StepperRow(label: String, value: Int, onMinus: () -> Unit, onPlus: (
 
 /** يعرض كتل ما بعد المتن بالترتيب (نص قابل للتحرير/جدول/صورة) — المحرّك الكتلي. */
 @Composable
-private fun DocumentBlocks(
-    blocks: List<BlockUi>,
-    onTextChange: (Int, TextFieldValue) -> Unit,
-    onTextFocus: (Int) -> Unit,
-    onTableChange: (Int, TableData) -> Unit,
-    onImageResize: (Int, DocImage) -> Unit,
-    onDelete: (Int) -> Unit,
+private fun BlockItem(
+    block: BlockUi,
+    onTextChange: (TextFieldValue) -> Unit,
+    onTextFocus: () -> Unit,
+    onTableChange: (TableData) -> Unit,
+    onImageResize: (DocImage) -> Unit,
+    onDelete: () -> Unit,
 ) {
-    Column(Modifier.fillMaxWidth()) {
-        blocks.forEachIndexed { i, b ->
-            when (b) {
-                is TextBlockUi -> BasicTextField(
-                    value = b.value,
-                    onValueChange = { onTextChange(i, it) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 48.dp)
-                        .background(Color.White)
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                        .onFocusChanged { if (it.isFocused) onTextFocus(i) },
-                    textStyle = TextStyle(fontSize = 16.sp, color = Color(0xFF1A1A1A)),
-                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                    decorationBox = { inner ->
-                        if (b.value.text.isEmpty()) {
-                            Text("تابع الكتابة…", color = Color(0xFFBBBBBB), textAlign = TextAlign.Right, modifier = Modifier.fillMaxWidth())
-                        }
-                        inner()
-                    },
-                )
-                is TableBlockUi -> TableBlockEditor(b.data, { onTableChange(i, it) }, { onDelete(i) })
-                is ImageBlockUi -> ImageBlockCard(b.img, { onImageResize(i, it) }, { onDelete(i) })
-            }
-        }
+    when (block) {
+        is TextBlockUi -> BasicTextField(
+            value = block.value,
+            onValueChange = onTextChange,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .background(Color.White)
+                .padding(horizontal = 8.dp, vertical = 4.dp)
+                .onFocusChanged { if (it.isFocused) onTextFocus() },
+            textStyle = TextStyle(fontSize = 16.sp, color = Color(0xFF1A1A1A)),
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+            decorationBox = { inner ->
+                if (block.value.text.isEmpty()) {
+                    Text("تابع الكتابة…", color = Color(0xFFBBBBBB), textAlign = TextAlign.Right, modifier = Modifier.fillMaxWidth())
+                }
+                inner()
+            },
+        )
+        is TableBlockUi -> TableBlockEditor(block.data, onTableChange, onDelete)
+        is ImageBlockUi -> ImageBlockCard(block.img, onImageResize, onDelete)
     }
 }
 
