@@ -31,8 +31,10 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.absolutePadding
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -130,6 +132,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
@@ -154,6 +157,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -599,41 +603,45 @@ fun EditorScreen(
                     val vScroll = rememberScrollState()
                     Box(Modifier.fillMaxSize()) {
                       Column(Modifier.fillMaxSize()) {
-                        // المسطرة العلوية ثابتة (خارج التمرير العمودي) ومتزامنة أفقياً
+                        // المسطرة العلوية ثابتة (خارج التمرير العمودي)، تُزاح أفقياً بقراءة قيمة التمرير فقط
                         if (showRuler) {
                             Row {
                                 Spacer(Modifier.width(rulerThick + gap))
-                                Box(Modifier.weight(1f).horizontalScroll(hScroll)) {
+                                Box(Modifier.weight(1f).clipToBounds()) {
                                     val curInd = RichTextOps.currentParaIndent(activeValue)
                                     val contentWidthPt = (page.pageWidthPt - page.marginLeftPt - page.marginRightPt).coerceAtLeast(1f)
-                                    HorizontalRuler(
-                                        pageWidthPt = page.pageWidthPt,
-                                        marginLeftPt = page.marginLeftPt,
-                                        marginRightPt = page.marginRightPt,
-                                        scale = scale,
-                                        rtl = rulerRtl,
-                                        firstIndentPt = curInd.firstPt,
-                                        leftIndentPt = curInd.leftPt,
-                                        maxIndentPt = contentWidthPt,
-                                        onIndentChange = { f, l -> activeOnChange(RichTextOps.setParagraphIndent(activeValue, f, l)) },
-                                        onChange = { l, r -> page = page.copy(marginLeftPt = l, marginRightPt = r) },
-                                    )
+                                    Box(Modifier.offset { IntOffset(-hScroll.value, 0) }) {
+                                        HorizontalRuler(
+                                            pageWidthPt = page.pageWidthPt,
+                                            marginLeftPt = page.marginLeftPt,
+                                            marginRightPt = page.marginRightPt,
+                                            scale = scale,
+                                            rtl = rulerRtl,
+                                            firstIndentPt = curInd.firstPt,
+                                            leftIndentPt = curInd.leftPt,
+                                            maxIndentPt = contentWidthPt,
+                                            onIndentChange = { f, l -> activeOnChange(RichTextOps.setParagraphIndent(activeValue, f, l)) },
+                                            onChange = { l, r -> page = page.copy(marginLeftPt = l, marginRightPt = r) },
+                                        )
+                                    }
                                 }
                             }
                             Spacer(Modifier.height(2.dp))
                         }
                         Row(Modifier.weight(1f)) {
                             if (showRuler) {
-                                // المسطرة الجانبية متزامنة عمودياً مع المحتوى
-                                Box(Modifier.verticalScroll(vScroll)) {
-                                    VerticalRuler(
-                                        pageHeightPt = page.pageHeightPt,
-                                        heightDp = sheetHeightDp,
-                                        marginTopPt = page.marginTopPt,
-                                        marginBottomPt = page.marginBottomPt,
-                                        scale = scale,
-                                        onChange = { t, b -> page = page.copy(marginTopPt = t, marginBottomPt = b) },
-                                    )
+                                // المسطرة الجانبية تُزاح عمودياً بقراءة قيمة التمرير فقط
+                                Box(Modifier.fillMaxHeight().clipToBounds()) {
+                                    Box(Modifier.offset { IntOffset(0, -vScroll.value) }) {
+                                        VerticalRuler(
+                                            pageHeightPt = page.pageHeightPt,
+                                            heightDp = sheetHeightDp,
+                                            marginTopPt = page.marginTopPt,
+                                            marginBottomPt = page.marginBottomPt,
+                                            scale = scale,
+                                            onChange = { t, b -> page = page.copy(marginTopPt = t, marginBottomPt = b) },
+                                        )
+                                    }
                                 }
                                 Spacer(Modifier.width(gap))
                             }
