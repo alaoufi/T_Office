@@ -208,11 +208,37 @@ private fun BlockUi.toModel(): DocBlock = when (this) {
 }
 
 /** يحمّل المستند: المتن الرئيسي = أول كتلة نصية، والباقي كتل بالترتيب. */
+/** أقصى طول لحقل نص واحد؛ النص الأكبر يُقسَّم إلى كتل لتفادي تجمّد الحقول الضخمة في Compose. */
+internal const val MAX_FIELD_CHARS = 4000
+
+/** يقسّم نصاً منسّقاً كبيراً إلى أجزاء عند حدود الفقرات (مع سقف صارم) للحفاظ على الأداء. */
+internal fun splitLargeText(content: androidx.compose.ui.text.AnnotatedString): List<androidx.compose.ui.text.AnnotatedString> {
+    if (content.length <= MAX_FIELD_CHARS) return listOf(content)
+    val text = content.text
+    val parts = mutableListOf<androidx.compose.ui.text.AnnotatedString>()
+    var start = 0
+    while (start < text.length) {
+        var end = minOf(start + MAX_FIELD_CHARS, text.length)
+        if (end < text.length) {
+            // مدّد حتى نهاية الفقرة التالية دون تجاوز ضعف الحد (تفادي كسر فقرة إن أمكن)
+            val hardCap = minOf(start + MAX_FIELD_CHARS * 2, text.length)
+            val nl = text.indexOf('\n', end)
+            end = if (nl in end until hardCap) nl + 1 else hardCap
+        }
+        parts.add(content.subSequence(start, end))
+        start = end
+    }
+    return parts
+}
+
 private fun loadBlocksInto(bundle: DocBundle, extra: MutableList<BlockUi>, setBody: (TextFieldValue) -> Unit) {
     val eff = bundle.effectiveBlocks()
     extra.clear()
     if (eff.isNotEmpty() && eff[0] is TextBlock) {
-        setBody(TextFieldValue((eff[0] as TextBlock).content))
+        // قسّم المتن الكبير: الجزء الأول متن، والبقية كتل نصية (يمنع الحقل الضخم الواحد)
+        val parts = splitLargeText((eff[0] as TextBlock).content)
+        setBody(TextFieldValue(parts[0]))
+        parts.drop(1).forEach { extra.add(TextBlockUi(TextFieldValue(it))) }
         eff.drop(1).forEach { extra.add(it.toUi()) }
     } else {
         setBody(TextFieldValue(""))
@@ -278,7 +304,8 @@ fun EditorScreen(
     LaunchedEffect(ui.isLoading) {
         if (!ui.isLoading && !initialized) {
             title = ui.title
-            val bundle = DocSerializer.parse(ui.json)
+            // التحليل خارج الخيط الرئيسي حتى لا يتجمّد فتح المستندات الكبيرة
+            val bundle = withContext(Dispatchers.Default) { DocSerializer.parse(ui.json) }
             page = bundle.page
             header = TextFieldValue(bundle.header)
             footer = TextFieldValue(bundle.footer)
