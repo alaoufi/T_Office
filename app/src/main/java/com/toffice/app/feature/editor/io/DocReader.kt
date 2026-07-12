@@ -25,7 +25,7 @@ object DocReader {
     /** يقرأ المستند تلقائياً: docx (ZIP) أو doc (OLE2) حسب التوقيع الثنائي. */
     fun readAny(bytes: ByteArray): DocBundle =
         if (isDoc(bytes)) read(bytes)
-        else DocxReader.read(java.io.ByteArrayInputStream(bytes))
+        else DocxReader.read(bytes)
 
     /** يستخرج النص الخام للمتن الرئيسي من ملف .doc. */
     internal fun extractText(data: ByteArray): String {

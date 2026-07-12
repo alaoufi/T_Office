@@ -21,8 +21,10 @@ import java.util.zip.ZipInputStream
 /** يقرأ مستند DOCX (OOXML): المتن + التنسيق + الهوامش + الترويسة + التذييل. */
 object DocxReader {
 
-    fun read(input: InputStream): DocBundle {
-        val parts = readAllParts(input)
+    fun read(input: InputStream): DocBundle = read(input.readBytes())
+
+    fun read(bytes: ByteArray): DocBundle {
+        val parts = readAllParts(bytes)
         val docXml = parts["word/document.xml"] ?: return DocBundle(AnnotatedString(""))
 
         val parsed = parseDocument(docXml)
@@ -50,20 +52,93 @@ object DocxReader {
         )
     }
 
-    private fun readAllParts(input: InputStream): Map<String, String> {
+    /**
+     * قراءة أجزاء ZIP عبر الفهرس المركزي (Central Directory) بدل ZipInputStream —
+     * يتحمّل ملفات docx المكتوبة بنمط التدفّق (data descriptor / CRC صفري) التي
+     * ترفضها ZipInputStream بخطأ "invalid entry CRC". يقرأ ملفات .xml فقط.
+     */
+    private fun readAllParts(data: ByteArray): Map<String, String> {
+        val map = LinkedHashMap<String, String>()
+        val eocd = findEocd(data)
+        if (eocd < 0) return readAllPartsStreaming(data)
+        val cdOffset = i32le(data, eocd + 16)
+        val cdCount = u16le(data, eocd + 10)
+        var p = cdOffset
+        var i = 0
+        while (i < cdCount && p + 46 <= data.size && i32le(data, p) == 0x02014b50) {
+            val method = u16le(data, p + 10)
+            val compSize = i32le(data, p + 20)
+            val fnLen = u16le(data, p + 28)
+            val extraLen = u16le(data, p + 30)
+            val commentLen = u16le(data, p + 32)
+            val localOff = i32le(data, p + 42)
+            val name = if (p + 46 + fnLen <= data.size) String(data, p + 46, fnLen, Charsets.UTF_8) else ""
+            if (name.endsWith(".xml")) {
+                runCatching { inflateEntry(data, localOff, method, compSize) }.getOrNull()?.let { map[name] = it }
+            }
+            p += 46 + fnLen + extraLen + commentLen
+            i++
+        }
+        return if (map.isEmpty()) readAllPartsStreaming(data) else map
+    }
+
+    private fun findEocd(data: ByteArray): Int {
+        var i = data.size - 22
+        val min = maxOf(0, data.size - 22 - 65536)
+        while (i >= min) {
+            if (i + 4 <= data.size && i32le(data, i) == 0x06054b50) return i
+            i--
+        }
+        return -1
+    }
+
+    private fun inflateEntry(data: ByteArray, localOff: Int, method: Int, compSize: Int): String? {
+        if (localOff < 0 || localOff + 30 > data.size || i32le(data, localOff) != 0x04034b50) return null
+        val fnLen = u16le(data, localOff + 26)
+        val extraLen = u16le(data, localOff + 28)
+        val start = localOff + 30 + fnLen + extraLen
+        if (compSize < 0 || start + compSize > data.size) return null
+        if (method == 0) return String(data, start, compSize, Charsets.UTF_8)
+        val inf = java.util.zip.Inflater(true)
+        inf.setInput(data, start, compSize)
+        val out = java.io.ByteArrayOutputStream(compSize * 3)
+        val buf = ByteArray(16384)
+        try {
+            while (!inf.finished()) {
+                val n = inf.inflate(buf)
+                if (n == 0 && (inf.needsInput() || inf.needsDictionary())) break
+                out.write(buf, 0, n)
+            }
+        } finally {
+            inf.end()
+        }
+        return String(out.toByteArray(), Charsets.UTF_8)
+    }
+
+    /** مسار احتياطي: ZipInputStream يتجاهل أخطاء CRC لكل مدخل. */
+    private fun readAllPartsStreaming(data: ByteArray): Map<String, String> {
         val map = mutableMapOf<String, String>()
-        ZipInputStream(input).use { zip ->
-            var entry = zip.nextEntry
-            while (entry != null) {
-                val name = entry.name
-                if (name.endsWith(".xml")) {
-                    map[name] = zip.readBytes().toString(Charsets.UTF_8)
+        runCatching {
+            ZipInputStream(java.io.ByteArrayInputStream(data)).use { zip ->
+                var entry = zip.nextEntry
+                while (entry != null) {
+                    val name = entry.name
+                    if (name.endsWith(".xml")) {
+                        runCatching { map[name] = zip.readBytes().toString(Charsets.UTF_8) }
+                    }
+                    entry = runCatching { zip.nextEntry }.getOrNull()
                 }
-                entry = zip.nextEntry
             }
         }
         return map
     }
+
+    private fun u16le(b: ByteArray, o: Int): Int =
+        (b[o].toInt() and 0xFF) or ((b[o + 1].toInt() and 0xFF) shl 8)
+
+    private fun i32le(b: ByteArray, o: Int): Int =
+        (b[o].toInt() and 0xFF) or ((b[o + 1].toInt() and 0xFF) shl 8) or
+            ((b[o + 2].toInt() and 0xFF) shl 16) or ((b[o + 3].toInt() and 0xFF) shl 24)
 
     private fun parseDocument(xml: String): Pair<AnnotatedString, PageSettings> {
         val parser = newParser(xml)

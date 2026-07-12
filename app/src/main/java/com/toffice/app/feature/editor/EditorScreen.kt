@@ -306,7 +306,8 @@ fun EditorScreen(
     LaunchedEffect(ui.isLoading) {
         if (!ui.isLoading && !initialized) {
             title = ui.title
-            val bundle = DocSerializer.parse(ui.json)
+            // التحليل خارج الخيط الرئيسي حتى لا تتجمّد المستندات كثيرة النص
+            val bundle = withContext(Dispatchers.Default) { DocSerializer.parse(ui.json) }
             page = bundle.page
             header = TextFieldValue(bundle.header)
             footer = TextFieldValue(bundle.footer)
