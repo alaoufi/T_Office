@@ -1,5 +1,7 @@
 package com.toffice.app
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -19,6 +21,7 @@ import dagger.hilt.android.AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        captureExternalOpen(intent)
         enableEdgeToEdge()
         setContent {
             TOfficeTheme {
@@ -32,6 +35,26 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        captureExternalOpen(intent)
+    }
+
+    /** يلتقط ملفاً خارجياً من «فتح بواسطة» (VIEW/SEND) ليُفتح داخل التطبيق. */
+    private fun captureExternalOpen(intent: Intent?) {
+        if (intent == null) return
+        val uri: Uri? = when (intent.action) {
+            Intent.ACTION_VIEW -> intent.data
+            Intent.ACTION_SEND -> intent.getParcelableExtra(Intent.EXTRA_STREAM)
+            else -> null
+        }
+        if (uri != null) {
+            val mime = intent.type ?: runCatching { contentResolver.getType(uri) }.getOrNull()
+            ExternalOpen.set(uri, mime)
         }
     }
 }

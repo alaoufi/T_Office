@@ -72,6 +72,18 @@ fun DocumentsListScreen(
         ActivityResultContracts.OpenDocument()
     ) { uri -> if (uri != null) pdfUri = uri }
 
+    // فتح ملف خارجي جاء عبر «فتح بواسطة» (VIEW): PDF في القارئ، وWord عبر الاستيراد
+    val extContext = androidx.compose.ui.platform.LocalContext.current
+    androidx.compose.runtime.LaunchedEffect(com.toffice.app.ExternalOpen.pending) {
+        val p = com.toffice.app.ExternalOpen.consume() ?: return@LaunchedEffect
+        val mime = (p.mime ?: runCatching { extContext.contentResolver.getType(p.uri) }.getOrNull()).orEmpty()
+        if (mime.contains("pdf") || p.uri.toString().lowercase(Locale.ROOT).endsWith(".pdf")) {
+            pdfUri = p.uri
+        } else {
+            viewModel.importDocx(p.uri) { id -> onOpenDocument(id) }
+        }
+    }
+
     val currentPdf = pdfUri
     if (currentPdf != null) {
         PdfViewerScreen(uri = currentPdf, title = "قارئ PDF", onBack = { pdfUri = null })
