@@ -9,7 +9,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.toffice.app.data.document.DocumentDao
-import com.toffice.app.feature.editor.io.DocxReader
+import com.toffice.app.feature.editor.io.DocReader
 import com.toffice.app.feature.editor.io.DocxWriter
 import com.toffice.app.feature.editor.io.PdfExporter
 import com.toffice.app.feature.editor.model.DocBundle
@@ -105,7 +105,7 @@ class EditorViewModel @Inject constructor(
             }.isSuccess
             val bundle = kotlinx.coroutines.withContext(Dispatchers.IO) {
                 try {
-                    context.contentResolver.openInputStream(uri)?.use { DocxReader.read(it) }
+                    context.contentResolver.openInputStream(uri)?.use { DocReader.readAny(it.readBytes()) }
                 } catch (e: Exception) {
                     null
                 }

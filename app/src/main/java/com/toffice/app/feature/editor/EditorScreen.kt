@@ -800,6 +800,7 @@ private fun PageSheet(
 
     val density = LocalDensity.current.density
     val dashColor = MaterialTheme.colorScheme.outlineVariant
+    val gapColor = MaterialTheme.colorScheme.surfaceVariant
     Column(
         Modifier
             .width(widthDp)
@@ -825,41 +826,39 @@ private fun PageSheet(
                     isAntiAlias = true
                     textAlign = android.graphics.Paint.Align.CENTER
                 }
+                // فجوة واضحة بين الصفحات بلون خلفية المحرّر (كأنها ورقتان منفصلتان) بحوافّ داكنة
+                val gapPx = 16f * density
                 for (p in 1 until pageCount) {
                     val y = p * pageH
                     if (y >= size.height) break
-                    // ظل أسفل الصفحة العليا
+                    val top = y - gapPx / 2f
+                    // ظل أسفل الورقة العليا
                     drawRect(
                         brush = Brush.verticalGradient(
-                            listOf(Color.Transparent, Color(0x40000000)),
-                            startY = y - 9f * density, endY = y,
+                            listOf(Color(0x33000000), Color.Transparent),
+                            startY = top, endY = top + 6f * density,
                         ),
-                        topLeft = Offset(0f, y - 9f * density),
-                        size = Size(size.width, 9f * density),
+                        topLeft = Offset(0f, top),
+                        size = Size(size.width, gapPx),
                     )
-                    drawLine(Color(0x55000000), Offset(0f, y), Offset(size.width, y), strokeWidth = 1.2f * density)
-                    // إضاءة أعلى الصفحة السفلى
-                    drawRect(
-                        brush = Brush.verticalGradient(
-                            listOf(Color(0x18000000), Color.Transparent),
-                            startY = y, endY = y + 7f * density,
-                        ),
-                        topLeft = Offset(0f, y),
-                        size = Size(size.width, 7f * density),
-                    )
-                    // شارة رقم الصفحة
+                    // شريط الفجوة نفسه
+                    drawRect(color = gapColor, topLeft = Offset(0f, top), size = Size(size.width, gapPx))
+                    // خطّان داكنان يحدّان الفجوة أعلى وأسفل
+                    drawLine(Color(0x66000000), Offset(0f, top), Offset(size.width, top), strokeWidth = 1.5f * density)
+                    drawLine(Color(0x66000000), Offset(0f, top + gapPx), Offset(size.width, top + gapPx), strokeWidth = 1.5f * density)
+                    // شارة رقم الصفحة في منتصف الفجوة
                     val label = "صفحة ${arabicDigits(p + 1)} من $totalLabel"
                     val tw = chip.measureText(label)
                     val chipW = tw + 16f * density
-                    val chipH = 16f * density
+                    val chipH = 15f * density
                     val cx = size.width / 2f
                     drawRoundRect(
-                        color = Color(0xCC424242),
-                        topLeft = Offset(cx - chipW / 2f, y - chipH - 2f * density),
+                        color = Color(0xDD424242),
+                        topLeft = Offset(cx - chipW / 2f, y - chipH / 2f),
                         size = Size(chipW, chipH),
                         cornerRadius = androidx.compose.ui.geometry.CornerRadius(chipH / 2f, chipH / 2f),
                     )
-                    drawContext.canvas.nativeCanvas.drawText(label, cx, y - 6f * density, chip)
+                    drawContext.canvas.nativeCanvas.drawText(label, cx, y + 4f * density, chip)
                 }
             },
     ) {

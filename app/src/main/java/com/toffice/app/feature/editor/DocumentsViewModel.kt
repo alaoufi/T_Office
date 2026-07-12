@@ -10,7 +10,7 @@ import androidx.lifecycle.viewModelScope
 import com.toffice.app.core.settings.SettingsRepository
 import com.toffice.app.data.document.DocumentDao
 import com.toffice.app.data.document.DocumentEntity
-import com.toffice.app.feature.editor.io.DocxReader
+import com.toffice.app.feature.editor.io.DocReader
 import com.toffice.app.feature.editor.model.DocBundle
 import com.toffice.app.feature.editor.model.DocSerializer
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -66,7 +66,7 @@ class DocumentsViewModel @Inject constructor(
             val json = withContext(Dispatchers.IO) {
                 try {
                     context.contentResolver.openInputStream(uri)?.use {
-                        DocSerializer.serialize(DocxReader.read(it))
+                        DocSerializer.serialize(DocReader.readAny(it.readBytes()))
                     }
                 } catch (e: Exception) {
                     null
