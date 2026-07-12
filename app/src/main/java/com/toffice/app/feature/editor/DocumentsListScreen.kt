@@ -98,7 +98,7 @@ fun DocumentsListScreen(
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.module_editor) + " (Word)") },
+                title = { Text(stringResource(R.string.module_editor) + " (Word) · إصدار " + com.toffice.app.BuildConfig.VERSION_NAME) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
