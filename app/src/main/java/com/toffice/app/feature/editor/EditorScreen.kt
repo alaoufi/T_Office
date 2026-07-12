@@ -247,8 +247,6 @@ fun EditorScreen(
     var hfEditing by remember { mutableStateOf<EditField?>(null) }
     // ارتفاع الورقة الفعلي (لمدّ المسطرة الجانبية ورسم فواصل الصفحات)
     var sheetHeightPx by remember { mutableStateOf(0) }
-    // ارتفاع كامل المحتوى (الورقة + الكتل) لمدّ المسطرة الجانبية
-    var contentHeightPx by remember { mutableStateOf(0) }
     // معامل التكبير (1 = ملء العرض)؛ يتيح التمرير الأفقي عند التكبير
     var zoom by remember { mutableStateOf(1f) }
 
@@ -590,8 +588,8 @@ fun EditorScreen(
                     val scale = baseScale * zoom
                     val sheetWidthDp = (page.pageWidthPt * scale).dp
                     val pageHeightDp = page.pageHeightPt * scale
-                    // ارتفاع المحتوى الفعلي (لا يقل عن صفحة) لمدّ المسطرة الجانبية وعدّ الصفحات
-                    val sheetHeightDp = maxOf(pageHeightDp, if (contentHeightPx > 0) contentHeightPx / density else pageHeightDp)
+                    // ارتفاع المحتوى الفعلي (من ارتفاع نص الورقة، مستقل عن عدد الصفحات لتفادي حلقة القياس)
+                    val sheetHeightDp = maxOf(pageHeightDp, if (sheetHeightPx > 0) sheetHeightPx / density else pageHeightDp)
                     val pageCount = paginationPageCount(sheetHeightDp, pageHeightDp)
 
                     // اتجاه المسطرة يتبع اتجاه الصفحة (ثابت لا يتأثر بالتنسيق)
@@ -641,11 +639,7 @@ fun EditorScreen(
                             }
                             // منطقة العرض: تمرير عمودي + أفقي (للتكبير/الجداول العريضة/الوضع الأفقي)
                             Box(Modifier.weight(1f).verticalScroll(vScroll).horizontalScroll(hScroll)) {
-                                Column(
-                                    Modifier
-                                        .width(sheetWidthDp)
-                                        .onSizeChanged { contentHeightPx = it.height },
-                                ) {
+                                Column(Modifier.width(sheetWidthDp)) {
                                     PageSheet(
                                         widthDp = sheetWidthDp,
                                         pageHeightDp = pageHeightDp,
