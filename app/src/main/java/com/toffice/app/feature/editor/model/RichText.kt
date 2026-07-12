@@ -31,6 +31,9 @@ const val COLOR_DEFAULT = 0
 /** مقدار المسافة البادئة لكل مستوى (نقطة ≈ ٠٫٥ بوصة كما في وورد). */
 const val INDENT_STEP_PT = 36
 
+/** نسبة تصغير الخط للأس المرتفع/المنخفض (تُطبَّق عند العرض وتُلغى عند القراءة لتفادي التقلّص التراكمي). */
+const val SCRIPT_FONT_SCALE = 0.66f
+
 /** عائلات الخطوط المتاحة (0 = الافتراضي). */
 const val FONT_DEFAULT = 0
 
@@ -130,7 +133,7 @@ data class CharAttrs(
             fontStyle = if (italic) FontStyle.Italic else null,
             fontFamily = fontFamilyOf(fontFamily),
             textDecoration = if (decos.isEmpty()) null else TextDecoration.combine(decos),
-            fontSize = if (script != 0) (sizeSp * 0.66f).sp else sizeSp.sp,
+            fontSize = if (script != 0) (sizeSp * SCRIPT_FONT_SCALE).sp else sizeSp.sp,
             baselineShift = when (script) {
                 1 -> BaselineShift.Superscript
                 2 -> BaselineShift.Subscript
@@ -204,17 +207,23 @@ fun AnnotatedString.toCharAttrs(): MutableList<CharAttrs> {
                 if (d.contains(TextDecoration.Underline)) a = a.copy(underline = true)
                 if (d.contains(TextDecoration.LineThrough)) a = a.copy(strike = true)
             }
-            if (s.fontSize != TextUnit.Unspecified) a = a.copy(sizeSp = s.fontSize.value.toInt())
             if (s.color != Color.Unspecified) a = a.copy(colorArgb = s.color.toArgb())
             if (s.background != Color.Unspecified) a = a.copy(highlightArgb = s.background.toArgb())
             if (s.fontFamily != null) a = a.copy(fontFamily = codeOfFontFamily(s.fontFamily))
-            if (s.baselineShift != null) a = a.copy(
+            val hasScript = s.baselineShift != null
+            if (hasScript) a = a.copy(
                 script = when (s.baselineShift) {
                     BaselineShift.Superscript -> 1
                     BaselineShift.Subscript -> 2
                     else -> 0
                 },
             )
+            // الحجم يُقرأ بعد الأس: يُلغى تصغير الأس لاستعادة الحجم المنطقي (تفادي التقلّص التراكمي عند الحفظ/الفتح)
+            if (s.fontSize != TextUnit.Unspecified) {
+                val raw = s.fontSize.value
+                val logical = if (hasScript) (raw / SCRIPT_FONT_SCALE).roundToInt() else raw.roundToInt()
+                a = a.copy(sizeSp = logical)
+            }
             attrs[i] = a
         }
     }
