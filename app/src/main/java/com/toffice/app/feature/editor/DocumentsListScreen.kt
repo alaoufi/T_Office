@@ -41,6 +41,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.height
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.toffice.app.R
@@ -98,12 +99,7 @@ fun DocumentsListScreen(
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
-                title = {
-                    Text(
-                        stringResource(R.string.module_editor) + " (Word) · " + com.toffice.app.BuildConfig.VERSION_NAME,
-                        maxLines = 1,
-                    )
-                },
+                title = { Text("مستندات (Word)", maxLines = 1) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
@@ -131,7 +127,15 @@ fun DocumentsListScreen(
     ) { padding ->
         if (state.documents.isEmpty() && !state.isLoading) {
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                Text("لا توجد مستندات — أنشئ مستنداً جديداً أو افتح ملف Word")
+                androidx.compose.foundation.layout.Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("لا توجد مستندات — أنشئ مستنداً جديداً أو افتح ملف Word")
+                    androidx.compose.foundation.layout.Spacer(Modifier.height(16.dp))
+                    Text(
+                        "الإصدار ${com.toffice.app.BuildConfig.VERSION_NAME}",
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
             }
         } else {
             LazyColumn(
