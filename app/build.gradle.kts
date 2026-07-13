@@ -14,8 +14,8 @@ android {
         applicationId = "com.toffice.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 12
-        versionName = "1.12"
+        versionCode = 13
+        versionName = "1.13"
         vectorDrawables { useSupportLibrary = true }
     }
 

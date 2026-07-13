@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.ParcelFileDescriptor
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -37,6 +38,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
@@ -58,9 +61,13 @@ fun PdfViewerScreen(uri: Uri, title: String, onBack: () -> Unit) {
     var pageCount by remember(uri) { mutableIntStateOf(0) }
     var error by remember(uri) { mutableStateOf<String?>(null) }
 
+    // نرسم بدقّة أعلى من عرض الشاشة (١٫٧×) ليبقى النص حاداً عند التكبير
     val targetWidthPx = with(LocalDensity.current) {
-        (LocalConfiguration.current.screenWidthDp.dp.toPx() - 24f).toInt().coerceIn(200, 2000)
+        ((LocalConfiguration.current.screenWidthDp.dp.toPx() - 24f) * 1.7f).toInt().coerceIn(200, 2200)
     }
+    // التكبير/الإزاحة (قرص بإصبعين)
+    var scale by remember { mutableStateOf(1f) }
+    var offset by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
 
     DisposableEffect(uri) {
         var pfd: ParcelFileDescriptor? = null
@@ -101,7 +108,19 @@ fun PdfViewerScreen(uri: Uri, title: String, onBack: () -> Unit) {
         }
         val r = renderer
         LazyColumn(
-            modifier = Modifier.fillMaxSize().background(Color(0xFFE0E0E0)),
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0xFFE0E0E0))
+                .pointerInput(Unit) {
+                    detectTransformGestures { _, pan, zoom, _ ->
+                        scale = (scale * zoom).coerceIn(1f, 5f)
+                        offset = if (scale <= 1f) androidx.compose.ui.geometry.Offset.Zero else offset + pan
+                    }
+                }
+                .graphicsLayer {
+                    scaleX = scale; scaleY = scale
+                    translationX = offset.x; translationY = offset.y
+                },
             contentPadding = PaddingValues(12.dp, padding.calculateTopPadding() + 12.dp, 12.dp, 24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
