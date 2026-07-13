@@ -670,9 +670,11 @@ fun EditorScreen(
                             }
                         }
                         // كتل ما بعد المتن بالترتيب (نص/جدول/صورة) — كلٌّ عنصر كسول مستقل
+                        val blockBg = if (page.bgColorArgb != 0) Color(page.bgColorArgb) else Color.White
                         items(extraBlocks.size, key = { "block_$it" }) { i ->
                             BlockItem(
                                 block = extraBlocks[i],
+                                bgColor = blockBg,
                                 onTextChange = { v -> extraBlocks[i] = TextBlockUi(v) },
                                 onTextFocus = { focusedExtra = i; focusTarget = EditField.Body; hfEditing = null },
                                 onTableChange = { t -> extraBlocks[i] = TableBlockUi(t) },
@@ -806,7 +808,7 @@ private fun PageSheet(
         Modifier
             .width(widthDp)
             .shadow(3.dp)
-            .background(Color.White)
+            .background(if (page.bgColorArgb != 0) Color(page.bgColorArgb) else Color.White)
             .onSizeChanged { onSheetHeight(it.height) }
             .drawWithContent {
                 drawContent()
@@ -1260,6 +1262,7 @@ private fun StepperRow(label: String, value: Int, onMinus: () -> Unit, onPlus: (
 @Composable
 private fun BlockItem(
     block: BlockUi,
+    bgColor: Color,
     onTextChange: (TextFieldValue) -> Unit,
     onTextFocus: () -> Unit,
     onTableChange: (TableData) -> Unit,
@@ -1273,7 +1276,7 @@ private fun BlockItem(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 48.dp)
-                .background(Color.White)
+                .background(bgColor)
                 .padding(horizontal = 8.dp, vertical = 4.dp)
                 .onFocusChanged { if (it.isFocused) onTextFocus() },
             textStyle = TextStyle(fontSize = 16.sp, color = Color(0xFF1A1A1A)),

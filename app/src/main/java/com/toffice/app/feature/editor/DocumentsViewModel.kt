@@ -65,8 +65,10 @@ class DocumentsViewModel @Inject constructor(
 
             val json = withContext(Dispatchers.IO) {
                 try {
-                    context.contentResolver.openInputStream(uri)?.use {
-                        DocSerializer.serialize(DocReader.readAny(it.readBytes()))
+                    val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                    if (bytes == null) null else {
+                        val bundle = saveImages(DocReader.readAny(bytes))
+                        DocSerializer.serialize(bundle)
                     }
                 } catch (e: Exception) {
                     null
@@ -91,6 +93,13 @@ class DocumentsViewModel @Inject constructor(
 
     fun delete(doc: DocumentEntity) {
         viewModelScope.launch { dao.delete(doc) }
+    }
+
+    /** يحفظ بايتات صور Word المستخرجة داخلياً ويحوّلها إلى كتل صور. */
+    private fun saveImages(b: DocBundle): DocBundle {
+        if (b.imageData.isEmpty()) return b
+        val saved = b.imageData.mapNotNull { com.toffice.app.feature.editor.io.ImageStore.importBytes(context, it) }
+        return b.copy(images = b.images + saved, imageData = emptyList())
     }
 
     private fun displayName(uri: Uri): String {

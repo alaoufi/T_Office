@@ -20,6 +20,7 @@ data class PageSettings(
     val marginBottomPt: Float = 72f,
     val showPageNumber: Boolean = false,
     val rtlPage: Boolean = true, // اتجاه الصفحة كاملة (عربي افتراضياً)
+    val bgColorArgb: Int = 0, // لون خلفية الصفحة (0 = أبيض/بلا)
 )
 
 /** قياس صفحة جاهز (الأبعاد بالنقاط، وضع عمودي). */
@@ -75,6 +76,8 @@ data class DocBundle(
     val afterBody: AnnotatedString = AnnotatedString(""),
     val images: List<DocImage> = emptyList(),
     val blocks: List<DocBlock> = emptyList(),
+    // بايتات الصور المستخرجة من Word (مؤقتة، تُحفظ لاحقاً عبر ImageStore ثم تُفرَّغ)
+    val imageData: List<ByteArray> = emptyList(),
 ) {
     /** الكتل الفعلية: المخزّنة إن وُجدت، وإلا تُبنى من الصيغة القديمة (متن ← جداول ← نص ← صور). */
     fun effectiveBlocks(): List<DocBlock> = if (blocks.isNotEmpty()) {
@@ -103,6 +106,7 @@ object DocSerializer {
             .put("mB", bundle.page.marginBottomPt.toDouble())
             .put("pn", bundle.page.showPageNumber)
             .put("rtl", bundle.page.rtlPage)
+            .put("bg", bundle.page.bgColorArgb)
         return JSONObject()
             .put("body", bodyObj)
             .put("page", page)
@@ -207,6 +211,7 @@ object DocSerializer {
             marginBottomPt = p.optDouble("mB", 72.0).toFloat(),
             showPageNumber = p.optBoolean("pn", false),
             rtlPage = p.optBoolean("rtl", true),
+            bgColorArgb = p.optInt("bg", 0),
         ) else PageSettings()
         return DocBundle(
             body = body,

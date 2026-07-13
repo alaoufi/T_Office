@@ -105,7 +105,14 @@ class EditorViewModel @Inject constructor(
             }.isSuccess
             val bundle = kotlinx.coroutines.withContext(Dispatchers.IO) {
                 try {
-                    context.contentResolver.openInputStream(uri)?.use { DocReader.readAny(it.readBytes()) }
+                    val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                    if (bytes == null) null else {
+                        val b = DocReader.readAny(bytes)
+                        if (b.imageData.isEmpty()) b else {
+                            val saved = b.imageData.mapNotNull { com.toffice.app.feature.editor.io.ImageStore.importBytes(context, it) }
+                            b.copy(images = b.images + saved, imageData = emptyList())
+                        }
+                    }
                 } catch (e: Exception) {
                     null
                 }

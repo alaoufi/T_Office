@@ -43,13 +43,93 @@ object DocxReader {
         val sectPr = Regex("<w:sectPr[\\s\\S]*?</w:sectPr>").find(docXml)?.value
         val rtlPage = if (sectPr != null) sectPr.contains("<w:bidi") else true
 
+        // لون خلفية الصفحة <w:background w:color="RRGGBB"/>
+        val bgHex = Regex("<w:background[^>]*w:color=\"([0-9A-Fa-f]{6})\"").find(docXml)?.groupValues?.get(1)
+        val bgArgb = if (bgHex != null && !bgHex.equals("FFFFFF", true) && !bgHex.equals("auto", true))
+            (0xFF000000.toInt() or bgHex.toInt(16)) else 0
+
+        // استخراج الصور من Word (بايتات؛ تُحفَظ لاحقاً في ViewModel)
+        val imageData = runCatching { extractImages(bytes, docXml) }.getOrDefault(emptyList())
+
         return DocBundle(
             body = parsed.first,
-            page = parsed.second.copy(showPageNumber = showPageNumber, rtlPage = rtlPage),
+            page = parsed.second.copy(showPageNumber = showPageNumber, rtlPage = rtlPage, bgColorArgb = bgArgb),
             header = AnnotatedString(headerXml?.let { plainText(it) } ?: ""),
             footer = AnnotatedString(footerText),
             tables = runCatching { parseTables(docXml) }.getOrDefault(emptyList()),
+            imageData = imageData,
         )
+    }
+
+    /** يستخرج بايتات صور Word النقطية بترتيب ظهورها في المتن (يتخطّى المكرّر وغير النقطي). */
+    private fun extractImages(data: ByteArray, docXml: String): List<ByteArray> {
+        val idx = zipIndex(data)
+        if (idx.isEmpty()) return emptyList()
+        val relsXml = idx["word/_rels/document.xml.rels"]?.let { inflateEntry(data, it[0], it[1], it[2]) }
+            ?: return emptyList()
+        val relMap = Regex("Id=\"([^\"]+)\"[^>]*?Target=\"([^\"]+)\"").findAll(relsXml)
+            .associate { it.groupValues[1] to it.groupValues[2] }
+        val embeds = Regex("r:embed=\"([^\"]+)\"").findAll(docXml).map { it.groupValues[1] }.toList()
+        val result = ArrayList<ByteArray>()
+        val seen = HashSet<String>()
+        val raster = Regex(".*\\.(jpe?g|png|gif|bmp|webp)$", RegexOption.IGNORE_CASE)
+        for (rid in embeds) {
+            val target = relMap[rid] ?: continue
+            val entryName = if (target.startsWith("/")) target.trimStart('/') else "word/$target"
+            if (!raster.matches(entryName) || !seen.add(entryName)) continue
+            val e = idx[entryName] ?: continue
+            inflateEntryBytes(data, e[0], e[1], e[2])?.let { result.add(it) }
+        }
+        return result
+    }
+
+    /** فهرس عناصر ZIP: الاسم ← [إزاحة الرأس المحلي، الطريقة، الحجم المضغوط]. */
+    private fun zipIndex(data: ByteArray): LinkedHashMap<String, IntArray> {
+        val idx = LinkedHashMap<String, IntArray>()
+        val eocd = findEocd(data)
+        if (eocd < 0) return idx
+        val cdOffset = i32le(data, eocd + 16)
+        val cdCount = u16le(data, eocd + 10)
+        var p = cdOffset
+        var i = 0
+        while (i < cdCount && p + 46 <= data.size && i32le(data, p) == 0x02014b50) {
+            val method = u16le(data, p + 10)
+            val compSize = i32le(data, p + 20)
+            val fnLen = u16le(data, p + 28)
+            val extraLen = u16le(data, p + 30)
+            val commentLen = u16le(data, p + 32)
+            val localOff = i32le(data, p + 42)
+            if (p + 46 + fnLen <= data.size) {
+                val name = String(data, p + 46, fnLen, Charsets.UTF_8)
+                if (name.isNotEmpty()) idx[name] = intArrayOf(localOff, method, compSize)
+            }
+            p += 46 + fnLen + extraLen + commentLen
+            i++
+        }
+        return idx
+    }
+
+    private fun inflateEntryBytes(data: ByteArray, localOff: Int, method: Int, compSize: Int): ByteArray? {
+        if (localOff < 0 || localOff + 30 > data.size || i32le(data, localOff) != 0x04034b50) return null
+        val fnLen = u16le(data, localOff + 26)
+        val extraLen = u16le(data, localOff + 28)
+        val start = localOff + 30 + fnLen + extraLen
+        if (compSize < 0 || start + compSize > data.size) return null
+        if (method == 0) return data.copyOfRange(start, start + compSize)
+        val inf = java.util.zip.Inflater(true)
+        inf.setInput(data, start, compSize)
+        val out = java.io.ByteArrayOutputStream(compSize * 3)
+        val buf = ByteArray(16384)
+        try {
+            while (!inf.finished()) {
+                val n = inf.inflate(buf)
+                if (n == 0 && (inf.needsInput() || inf.needsDictionary())) break
+                out.write(buf, 0, n)
+            }
+        } finally {
+            inf.end()
+        }
+        return out.toByteArray()
     }
 
     /**
