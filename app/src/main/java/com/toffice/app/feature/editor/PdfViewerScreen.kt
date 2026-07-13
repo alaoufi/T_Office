@@ -61,9 +61,9 @@ fun PdfViewerScreen(uri: Uri, title: String, onBack: () -> Unit) {
     var pageCount by remember(uri) { mutableIntStateOf(0) }
     var error by remember(uri) { mutableStateOf<String?>(null) }
 
-    // نرسم بدقّة أعلى من عرض الشاشة (١٫٧×) ليبقى النص حاداً عند التكبير
+    // دقّة الرسم = عرض الشاشة تقريباً (توازن الحدّة/الذاكرة)؛ التكبير يتم بالإصبعين
     val targetWidthPx = with(LocalDensity.current) {
-        ((LocalConfiguration.current.screenWidthDp.dp.toPx() - 24f) * 1.7f).toInt().coerceIn(200, 2200)
+        (LocalConfiguration.current.screenWidthDp.dp.toPx() - 24f).toInt().coerceIn(200, 1400)
     }
     // التكبير/الإزاحة (قرص بإصبعين)
     var scale by remember { mutableStateOf(1f) }
@@ -133,7 +133,8 @@ fun PdfViewerScreen(uri: Uri, title: String, onBack: () -> Unit) {
                             mutex.withLock {
                                 val p = rend.openPage(index)
                                 val h = (targetWidthPx.toFloat() * p.height / p.width).toInt().coerceAtLeast(1)
-                                val bmp = Bitmap.createBitmap(targetWidthPx, h, Bitmap.Config.ARGB_8888)
+                                // RGB_565 = نصف ذاكرة ARGB؛ كافٍ لعرض الصفحات
+                                val bmp = Bitmap.createBitmap(targetWidthPx, h, Bitmap.Config.RGB_565)
                                 bmp.eraseColor(android.graphics.Color.WHITE)
                                 p.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
                                 p.close()
@@ -142,6 +143,14 @@ fun PdfViewerScreen(uri: Uri, title: String, onBack: () -> Unit) {
                         } catch (e: Exception) {
                             null
                         }
+                    }
+                }
+                // تدوير الذاكرة: أعِد صورة الصفحة عند خروجها من العرض (تفادي تراكم الذاكرة)
+                DisposableEffect(index, r) {
+                    onDispose {
+                        val old = bitmap
+                        bitmap = null
+                        old?.let { if (!it.isRecycled) it.recycle() }
                     }
                 }
                 val bmp = bitmap

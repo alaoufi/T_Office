@@ -12,7 +12,7 @@ import java.util.UUID
 object ImageStore {
 
     private const val DEFAULT_WIDTH_PT = 240f
-    private const val MAX_DECODE_PX = 1280
+    private const val MAX_DECODE_PX = 1000
 
     /** ينسخ الصورة المختارة إلى تخزين التطبيق الداخلي ويعيد وصفها (أوفلاين دائماً). */
     fun importImage(context: Context, uri: Uri): DocImage? = try {
@@ -64,7 +64,10 @@ object ImageStore {
         var sample = 1
         val larger = maxOf(bounds.outWidth, bounds.outHeight)
         while (larger / sample > maxPx) sample *= 2
-        BitmapFactory.decodeFile(path, BitmapFactory.Options().apply { inSampleSize = sample })
+        BitmapFactory.decodeFile(path, BitmapFactory.Options().apply {
+            inSampleSize = sample
+            inPreferredConfig = Bitmap.Config.RGB_565 // نصف الذاكرة
+        })
     } catch (e: Exception) {
         null
     }
@@ -72,6 +75,26 @@ object ImageStore {
     /** يحذف ملف الصورة الداخلي (نسخة خاصة بنا فقط). */
     fun delete(path: String) {
         runCatching { val f = File(path); if (f.exists() && f.path.contains("doc_images")) f.delete() }
+    }
+
+    /**
+     * تنظيف عميق: يحذف كل صور المستندات غير المشار إليها من أي مستند (بقايا الاستيراد المتكرّر).
+     * [usedPaths] = مجموعة مسارات الصور المستخدمة فعلاً في قاعدة البيانات.
+     */
+    fun cleanupOrphans(context: Context, usedPaths: Set<String>): Int {
+        return try {
+            val dir = File(context.filesDir, "doc_images")
+            if (!dir.isDirectory) return 0
+            var removed = 0
+            dir.listFiles()?.forEach { f ->
+                if (f.isFile && f.absolutePath !in usedPaths) {
+                    if (f.delete()) removed++
+                }
+            }
+            removed
+        } catch (e: Exception) {
+            0
+        }
     }
 
     private fun extOf(context: Context, uri: Uri): String {

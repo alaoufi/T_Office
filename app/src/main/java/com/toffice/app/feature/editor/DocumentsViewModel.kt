@@ -19,6 +19,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -43,6 +44,20 @@ class DocumentsViewModel @Inject constructor(
 
     private val _events = MutableSharedFlow<String>()
     val events = _events.asSharedFlow()
+
+    init {
+        // تنظيف عميق عند البدء: احذف صور المستندات المتبقّية غير المستخدمة (بقايا استيراد متكرّر)
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val docs = dao.observeAll().first()
+                val used = HashSet<String>()
+                val re = Regex("\"p\":\"([^\"]+)\"")
+                docs.forEach { d -> re.findAll(d.contentJson).forEach { used.add(it.groupValues[1]) } }
+                com.toffice.app.feature.editor.io.ImageStore.cleanupOrphans(context, used)
+            } catch (_: Exception) {
+            }
+        }
+    }
 
     fun createNew(onCreated: (Long) -> Unit) {
         viewModelScope.launch {
@@ -92,7 +107,15 @@ class DocumentsViewModel @Inject constructor(
     }
 
     fun delete(doc: DocumentEntity) {
-        viewModelScope.launch { dao.delete(doc) }
+        viewModelScope.launch {
+            dao.delete(doc)
+            // احذف صور هذا المستند من التخزين الداخلي
+            withContext(Dispatchers.IO) {
+                Regex("\"p\":\"([^\"]+)\"").findAll(doc.contentJson).forEach {
+                    com.toffice.app.feature.editor.io.ImageStore.delete(it.groupValues[1])
+                }
+            }
+        }
     }
 
     /** يحفظ بايتات صور Word المستخرجة داخلياً ويحوّلها إلى كتل صور. */
