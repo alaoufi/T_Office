@@ -62,19 +62,22 @@ fun DocumentsListScreen(
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
+    var pdfUri by remember { mutableStateOf<Uri?>(null) }
+    val extContext = androidx.compose.ui.platform.LocalContext.current
+
+    // فتح ملف واحد يشمل Word و PDF: يُوجَّه حسب النوع
     val importLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
-        if (uri != null) viewModel.importDocx(uri) { id -> onOpenDocument(id) }
+        if (uri != null) {
+            val mime = runCatching { extContext.contentResolver.getType(uri) }.getOrNull().orEmpty()
+            if (mime.contains("pdf") || uri.toString().lowercase(Locale.ROOT).endsWith(".pdf")) {
+                pdfUri = uri
+            } else viewModel.importDocx(uri) { id -> onOpenDocument(id) }
+        }
     }
 
-    var pdfUri by remember { mutableStateOf<Uri?>(null) }
-    val pdfLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri -> if (uri != null) pdfUri = uri }
-
     // فتح ملف خارجي جاء عبر «فتح بواسطة» (VIEW): PDF في القارئ، وWord عبر الاستيراد
-    val extContext = androidx.compose.ui.platform.LocalContext.current
     androidx.compose.runtime.LaunchedEffect(com.toffice.app.ExternalOpen.pending) {
         val p = com.toffice.app.ExternalOpen.consume() ?: return@LaunchedEffect
         val mime = (p.mime ?: runCatching { extContext.contentResolver.getType(p.uri) }.getOrNull()).orEmpty()
@@ -106,13 +109,10 @@ fun DocumentsListScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { pdfLauncher.launch(arrayOf("application/pdf")) }) {
-                        Icon(Icons.Default.PictureAsPdf, contentDescription = "فتح PDF")
-                    }
                     IconButton(onClick = {
-                        importLauncher.launch(arrayOf(MIME_DOCX, "application/msword", "*/*"))
+                        importLauncher.launch(arrayOf(MIME_DOCX, "application/msword", "application/pdf", "*/*"))
                     }) {
-                        Icon(Icons.Default.FileOpen, contentDescription = "فتح ملف Word")
+                        Icon(Icons.Default.FileOpen, contentDescription = "فتح ملف (Word أو PDF)")
                     }
                 },
             )

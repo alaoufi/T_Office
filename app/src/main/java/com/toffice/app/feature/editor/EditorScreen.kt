@@ -278,6 +278,8 @@ fun EditorScreen(
     var page by remember { mutableStateOf(PageSettings()) }
     var header by remember { mutableStateOf(TextFieldValue()) }
     var footer by remember { mutableStateOf(TextFieldValue()) }
+    // عند فتح PDF من «فتح ملف» — يُعرض داخل نفس التطبيق
+    var pdfUri by remember { mutableStateOf<android.net.Uri?>(null) }
     // كتل ما بعد المتن الرئيسي، بالترتيب (نص/جدول/صورة) — المحرّك الكتلي
     val extraBlocks = remember { mutableStateListOf<BlockUi>() }
     // الكتلة النصية المركّزة ضمن extraBlocks (-1 = المتن الرئيسي)
@@ -374,17 +376,23 @@ fun EditorScreen(
         }
     }
 
+    val context = LocalContext.current
     val openLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
-        if (uri != null) viewModel.openDocx(uri) { newTitle, bundle ->
-            title = newTitle
-            page = bundle.page
-            header = TextFieldValue(bundle.header)
-            footer = TextFieldValue(bundle.footer)
-            loadBlocksInto(bundle, extraBlocks) { value = it }
-            undoStack.clear()
-            redoStack.clear()
+        if (uri != null) {
+            val mime = runCatching { context.contentResolver.getType(uri) }.getOrNull().orEmpty()
+            if (mime.contains("pdf") || uri.toString().lowercase().endsWith(".pdf")) {
+                pdfUri = uri // فتح PDF داخل نفس التطبيق (عارض مطابق)
+            } else viewModel.openDocx(uri) { newTitle, bundle ->
+                title = newTitle
+                page = bundle.page
+                header = TextFieldValue(bundle.header)
+                footer = TextFieldValue(bundle.footer)
+                loadBlocksInto(bundle, extraBlocks) { value = it }
+                undoStack.clear()
+                redoStack.clear()
+            }
         }
     }
     val exportLauncher = rememberLauncherForActivityResult(
@@ -402,7 +410,6 @@ fun EditorScreen(
     ) { uri ->
         if (uri != null) viewModel.exportText(uri, value.text)
     }
-    val context = LocalContext.current
     val imageScope = rememberCoroutineScope()
     val imageLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
@@ -486,6 +493,13 @@ fun EditorScreen(
     }
 
     BackHandler { persist(); onBack() }
+
+    // عرض PDF داخل نفس التطبيق عند فتحه من «فتح ملف»
+    val openPdf = pdfUri
+    if (openPdf != null) {
+        PdfViewerScreen(uri = openPdf, title = "عارض PDF", onBack = { pdfUri = null })
+        return
+    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
@@ -1153,7 +1167,7 @@ private fun EditorMenuBar(
             MenuRow("إعداد الصفحة", Icons.Default.AspectRatio) { close(); onPageSetup() }
             MenuRow(if (page.showPageNumber) "إخفاء ترقيم الصفحات" else "إظهار ترقيم الصفحات", Icons.Default.Numbers) { close(); onTogglePageNumber() }
             HorizontalDivider()
-            MenuRow("إغلاق", Icons.Default.Close) { close(); onClose() }
+            MenuRow("مستنداتي", Icons.Default.Folder) { close(); onClose() }
         }
         MenuBarMenu("تحرير", openMenu, onOpenMenu) { close ->
             MenuRow("تراجع", Icons.AutoMirrored.Filled.Undo, enabled = canUndo) { close(); onUndo() }

@@ -12,6 +12,9 @@ object Routes {
     const val EXPENSES = "expenses"   // الميزانية والمصروفات
     const val DOCUMENTS = "documents" // الملفات والمستندات
 
+    const val LAUNCH = "launch"      // شاشة بدء: تفتح آخر مستند مباشرةً
+    const val DOCS_LIST = "docs"     // قائمة المستندات (مستنداتي)
+
     const val EDITOR_DOC = "editor/{docId}"
     fun editorDoc(id: Long) = "editor/$id"
 

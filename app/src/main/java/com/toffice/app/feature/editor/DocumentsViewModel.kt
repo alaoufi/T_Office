@@ -68,6 +68,14 @@ class DocumentsViewModel @Inject constructor(
         }
     }
 
+    /** يفتح آخر مستند مُعدَّل، أو ينشئ واحداً جديداً إن لم توجد مستندات — لبدء الدخول مباشرةً في المحرّر. */
+    fun openLatestOrNew(onReady: (Long) -> Unit) {
+        viewModelScope.launch {
+            val latest = dao.observeAll().first().firstOrNull()
+            if (latest != null) onReady(latest.id) else createNew(onReady)
+        }
+    }
+
     fun importDocx(uri: Uri, onImported: (Long) -> Unit) {
         viewModelScope.launch {
             // الاحتفاظ بإذن دائم للقراءة والكتابة (للحفظ بنفس الملف لاحقاً)

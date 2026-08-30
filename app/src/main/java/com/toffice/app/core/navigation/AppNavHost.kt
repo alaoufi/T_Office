@@ -11,6 +11,7 @@ import com.toffice.app.feature.common.PlaceholderScreen
 import com.toffice.app.feature.dashboard.DashboardScreen
 import com.toffice.app.feature.editor.DocumentsListScreen
 import com.toffice.app.feature.editor.EditorScreen
+import com.toffice.app.feature.editor.LaunchScreen
 import com.toffice.app.feature.settings.SettingsScreen
 import com.toffice.app.feature.tasks.TasksScreen
 
@@ -39,7 +40,22 @@ fun AppNavHost(navController: NavHostController = rememberNavController()) {
             PlaceholderScreen(title = "الملفات والمستندات", onBack = { navController.popBackStack() })
         }
         composable(Routes.EDITOR) {
-            // شاشة البداية: قائمة مستندات Word. زر الرجوع يفتح لوحة الوحدات الأخرى.
+            // الدخول مباشرةً في المحرّر (آخر مستند أو جديد)؛ أو قائمة المستندات عند «فتح بواسطة».
+            LaunchScreen(
+                onReady = { id ->
+                    navController.navigate(Routes.editorDoc(id)) {
+                        popUpTo(Routes.EDITOR) { inclusive = true }
+                    }
+                },
+                onExternal = {
+                    navController.navigate(Routes.DOCS_LIST) {
+                        popUpTo(Routes.EDITOR) { inclusive = true }
+                    }
+                },
+            )
+        }
+        composable(Routes.DOCS_LIST) {
+            // قائمة المستندات (مستنداتي) — تُفتح من داخل المحرّر.
             DocumentsListScreen(
                 onBack = { navController.navigate(Routes.DASHBOARD) },
                 onOpenDocument = { id -> navController.navigate(Routes.editorDoc(id)) },
@@ -49,7 +65,9 @@ fun AppNavHost(navController: NavHostController = rememberNavController()) {
             route = Routes.EDITOR_DOC,
             arguments = listOf(navArgument("docId") { type = NavType.StringType }),
         ) {
-            EditorScreen(onBack = { navController.popBackStack() })
+            EditorScreen(onBack = {
+                navController.navigate(Routes.DOCS_LIST) { launchSingleTop = true }
+            })
         }
         composable(Routes.BACKUP) {
             PlaceholderScreen(title = "النسخ الاحتياطي", onBack = { navController.popBackStack() })
