@@ -803,7 +803,6 @@ private fun PageSheet(
 
     val density = LocalDensity.current.density
     val dashColor = MaterialTheme.colorScheme.outlineVariant
-    val gapColor = MaterialTheme.colorScheme.surfaceVariant
     Column(
         Modifier
             .width(widthDp)
@@ -829,39 +828,23 @@ private fun PageSheet(
                     isAntiAlias = true
                     textAlign = android.graphics.Paint.Align.CENTER
                 }
-                // فجوة واضحة بين الصفحات بلون خلفية المحرّر (كأنها ورقتان منفصلتان) بحوافّ داكنة
-                val gapPx = 16f * density
+                // فاصل صفحات واضح لكن رفيع (لا يُخفي سطراً) + شارة رقم الصفحة عند الحافة
+                val sep = Color(0xFF5C6BC0)
                 for (p in 1 until pageCount) {
                     val y = p * pageH
                     if (y >= size.height) break
-                    val top = y - gapPx / 2f
-                    // ظل أسفل الورقة العليا
-                    drawRect(
-                        brush = Brush.verticalGradient(
-                            listOf(Color(0x33000000), Color.Transparent),
-                            startY = top, endY = top + 6f * density,
-                        ),
-                        topLeft = Offset(0f, top),
-                        size = Size(size.width, gapPx),
-                    )
-                    // شريط الفجوة نفسه
-                    drawRect(color = gapColor, topLeft = Offset(0f, top), size = Size(size.width, gapPx))
-                    // خطّان داكنان يحدّان الفجوة أعلى وأسفل
-                    drawLine(Color(0x66000000), Offset(0f, top), Offset(size.width, top), strokeWidth = 1.5f * density)
-                    drawLine(Color(0x66000000), Offset(0f, top + gapPx), Offset(size.width, top + gapPx), strokeWidth = 1.5f * density)
-                    // شارة رقم الصفحة في منتصف الفجوة
+                    drawLine(sep, Offset(0f, y), Offset(size.width, y), strokeWidth = 3f * density)
                     val label = "صفحة ${arabicDigits(p + 1)} من $totalLabel"
-                    val tw = chip.measureText(label)
-                    val chipW = tw + 16f * density
-                    val chipH = 15f * density
-                    val cx = size.width / 2f
+                    val chipW = chip.measureText(label) + 16f * density
+                    val chipH = 16f * density
+                    val cxChip = chipW / 2f + 6f * density // عند الحافة اليسرى (الهامش غالباً فارغ)
                     drawRoundRect(
-                        color = Color(0xDD424242),
-                        topLeft = Offset(cx - chipW / 2f, y - chipH / 2f),
+                        color = sep,
+                        topLeft = Offset(cxChip - chipW / 2f, y - chipH / 2f),
                         size = Size(chipW, chipH),
                         cornerRadius = androidx.compose.ui.geometry.CornerRadius(chipH / 2f, chipH / 2f),
                     )
-                    drawContext.canvas.nativeCanvas.drawText(label, cx, y + 4f * density, chip)
+                    drawContext.canvas.nativeCanvas.drawText(label, cxChip, y + 4f * density, chip)
                 }
             },
     ) {
