@@ -817,8 +817,20 @@ private fun PrintPreview(
                     if (footer.text.isNotBlank()) {
                         drawText(measurer, footer, topLeft = Offset(leftPx, footY), style = hfStyle, size = Size(contentWpx, size.height - footY))
                     }
-                    val pn = measurer.measure(AnnotatedString("صفحة ${arabicDigits(idx + 1)} من ${arabicDigits(total)}"), style = TextStyle(fontSize = 12.sp, color = Color(0xFF777777)))
-                    drawText(pn, topLeft = Offset((size.width - pn.size.width) / 2f, size.height - pn.size.height - 6f * density))
+                    if (page.showPageNumber) {
+                        val useAr = page.rtlPage
+                        fun d(n: Int) = if (useAr) arabicDigits(n) else n.toString()
+                        val pn = measurer.measure(
+                            AnnotatedString("${d(idx + 1)} / ${d(total)}"),
+                            style = TextStyle(fontSize = 12.sp, color = Color(0xFF777777)),
+                        )
+                        val pnX = when (page.pageNumberAlign) {
+                            0 -> size.width - page.marginRightPt * scale * density - pn.size.width // يمين
+                            2 -> page.marginLeftPt * scale * density // يسار
+                            else -> (size.width - pn.size.width) / 2f // وسط
+                        }
+                        drawText(pn, topLeft = Offset(pnX, size.height - pn.size.height - 6f * density))
+                    }
                 }
             }
             Spacer(Modifier.height(14.dp))
@@ -877,45 +889,14 @@ private fun PageSheet(
                     drawLine(dashColor, Offset(mlDp * density, botY), Offset(size.width - mrDp * density, botY), strokeWidth = 1f, pathEffect = dash)
                 }
                 val pageH = pageHeightDp * density
-                // فجوة رمادية واضحة بين الصفحات (كوورد) تحتوي التذييل ورقم الصفحة بعيداً عن جسم النص
-                val useArabic = page.rtlPage
-                fun digits(n: Int) = if (useArabic) arabicDigits(n) else n.toString()
-                val footerText = footer.annotatedString.text.replace("\n", " ").trim()
-                val gapColor = Color(0xFFD7DBE2)
-                val edge = Color(0x33000000)
-                val gapH = 36f * density
-                val fPaint = android.graphics.Paint().apply {
-                    color = android.graphics.Color.parseColor("#444444")
-                    textSize = 11f * density
-                    isAntiAlias = true
-                }
-                fun drawPageNumber(cy: Float, num: Int) {
-                    val pnLabel = "${digits(num)} / ${digits(pageCount)}"
-                    val x = when (page.pageNumberAlign) {
-                        0 -> { fPaint.textAlign = android.graphics.Paint.Align.RIGHT; size.width - mrDp * density }
-                        2 -> { fPaint.textAlign = android.graphics.Paint.Align.LEFT; mlDp * density }
-                        else -> { fPaint.textAlign = android.graphics.Paint.Align.CENTER; size.width / 2f }
-                    }
-                    drawContext.canvas.nativeCanvas.drawText(pnLabel, x, cy, fPaint)
-                }
+                // وضع التحرير: خطّ فاصل رفيع فقط عند حدّ الصفحة (لا يقطع النص)
+                // التذييل وأرقام الصفحات تظهر في «معاينة الطباعة» و PDF حيث الصفحات حقيقية
+                val sep = Color(0x554A5568)
                 for (p in 1 until pageCount) {
                     val y = p * pageH
                     if (y >= size.height) break
-                    val top = y - gapH / 2f
-                    // خطّ فاصل بين جسم الصفحة والتذييل، ثم الفجوة الرمادية، ثم خطّ قبل الصفحة التالية
-                    drawLine(edge, Offset(0f, top), Offset(size.width, top), strokeWidth = 1f)
-                    drawRect(color = gapColor, topLeft = Offset(0f, top), size = Size(size.width, gapH))
-                    drawLine(edge, Offset(0f, top + gapH), Offset(size.width, top + gapH), strokeWidth = 1f)
-                    // التذييل (سطر أعلى الفجوة) ثم رقم الصفحة (سطر أسفلها)
-                    if (footerText.isNotEmpty()) {
-                        fPaint.textAlign = android.graphics.Paint.Align.CENTER
-                        drawContext.canvas.nativeCanvas.drawText(footerText, size.width / 2f, top + 14f * density, fPaint)
-                    }
-                    if (page.showPageNumber) drawPageNumber(top + 30f * density, p)
-                }
-                // رقم صفحة الورقة الأخيرة (لا فجوة بعدها) في هامشها السفلي
-                if (page.showPageNumber && pageCount >= 1) {
-                    drawPageNumber(size.height - mbDp * density + 14f * density, pageCount)
+                    drawLine(sep, Offset(0f, y), Offset(size.width, y), strokeWidth = 1.5f * density,
+                        pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(6f * density, 4f * density)))
                 }
             },
     ) {

@@ -85,6 +85,19 @@ fun SettingsScreen(
                 Text("اتجاه أفقي (Landscape)", Modifier.weight(1f))
                 Switch(checked = state.landscape, onCheckedChange = { viewModel.setLandscape(it) })
             }
+
+            HorizontalDivider(Modifier.padding(vertical = 8.dp))
+
+            // معلومات التطبيق العامة
+            Text("عن التطبيق", style = MaterialTheme.typography.titleMedium)
+            Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("مكتبي — محرّر المستندات", Modifier.weight(1f))
+                Text(
+                    "الإصدار ${com.toffice.app.BuildConfig.VERSION_NAME}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
         }
     }
 }

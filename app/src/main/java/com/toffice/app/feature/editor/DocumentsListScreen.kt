@@ -127,15 +127,7 @@ fun DocumentsListScreen(
     ) { padding ->
         if (state.documents.isEmpty() && !state.isLoading) {
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                androidx.compose.foundation.layout.Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("لا توجد مستندات — أنشئ مستنداً جديداً أو افتح ملف Word")
-                    androidx.compose.foundation.layout.Spacer(Modifier.height(16.dp))
-                    Text(
-                        "الإصدار ${com.toffice.app.BuildConfig.VERSION_NAME}",
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                }
+                Text("لا توجد مستندات — أنشئ مستنداً جديداً أو افتح ملف Word")
             }
         } else {
             LazyColumn(
