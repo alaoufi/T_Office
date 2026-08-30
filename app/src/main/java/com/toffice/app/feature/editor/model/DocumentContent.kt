@@ -21,6 +21,7 @@ data class PageSettings(
     val showPageNumber: Boolean = false,
     val rtlPage: Boolean = true, // اتجاه الصفحة كاملة (عربي افتراضياً)
     val bgColorArgb: Int = 0, // لون خلفية الصفحة (0 = أبيض/بلا)
+    val pageNumberAlign: Int = 1, // موضع رقم الصفحة: 0=يمين، 1=وسط، 2=يسار
 )
 
 /** قياس صفحة جاهز (الأبعاد بالنقاط، وضع عمودي). */
@@ -107,6 +108,7 @@ object DocSerializer {
             .put("pn", bundle.page.showPageNumber)
             .put("rtl", bundle.page.rtlPage)
             .put("bg", bundle.page.bgColorArgb)
+            .put("pna", bundle.page.pageNumberAlign)
         return JSONObject()
             .put("body", bodyObj)
             .put("page", page)
@@ -212,6 +214,7 @@ object DocSerializer {
             showPageNumber = p.optBoolean("pn", false),
             rtlPage = p.optBoolean("rtl", true),
             bgColorArgb = p.optInt("bg", 0),
+            pageNumberAlign = p.optInt("pna", 1),
         ) else PageSettings()
         return DocBundle(
             body = body,

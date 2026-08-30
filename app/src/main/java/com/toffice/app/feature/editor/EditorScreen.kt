@@ -846,6 +846,35 @@ private fun PageSheet(
                     )
                     drawContext.canvas.nativeCanvas.drawText(label, cxChip, y + 4f * density, chip)
                 }
+                // تذييل متكرّر على كل صفحة + رقم صفحة تلقائي (بموضع اللغة والأرقام حسب اتجاه الصفحة)
+                val useArabic = page.rtlPage
+                fun digits(n: Int) = if (useArabic) arabicDigits(n) else n.toString()
+                val footerText = footer.annotatedString.text.replace("\n", " ").trim()
+                val fPaint = android.graphics.Paint().apply {
+                    color = android.graphics.Color.parseColor("#555555")
+                    textSize = 12f * density
+                    isAntiAlias = true
+                }
+                for (p in 0 until pageCount) {
+                    val bandBottom = (p + 1) * pageH
+                    // نصّ التذييل (يتكرّر) — عدا الصفحة الأخيرة (يظهر فيها الحقل القابل للتحرير)
+                    if (footerText.isNotEmpty() && p < pageCount - 1) {
+                        fPaint.textAlign = android.graphics.Paint.Align.CENTER
+                        drawContext.canvas.nativeCanvas.drawText(
+                            footerText, size.width / 2f, bandBottom - mbDp * density + 16f * density, fPaint,
+                        )
+                    }
+                    // رقم الصفحة: «رقم / إجمالي» حسب الموضع المختار
+                    if (page.showPageNumber) {
+                        val pnLabel = "${digits(p + 1)} / ${digits(pageCount)}"
+                        val x = when (page.pageNumberAlign) {
+                            0 -> { fPaint.textAlign = android.graphics.Paint.Align.RIGHT; size.width - mrDp * density }
+                            2 -> { fPaint.textAlign = android.graphics.Paint.Align.LEFT; mlDp * density }
+                            else -> { fPaint.textAlign = android.graphics.Paint.Align.CENTER; size.width / 2f }
+                        }
+                        drawContext.canvas.nativeCanvas.drawText(pnLabel, x, bandBottom - 8f * density, fPaint)
+                    }
+                }
             },
     ) {
         // منطقة الهامش العلوي + الترويسة
@@ -893,20 +922,12 @@ private fun PageSheet(
             HeaderFooterField(
                 value = footer,
                 onChange = onFooterChange,
-                placeholder = "التذييل (نقر مزدوج للتحرير)",
+                placeholder = "التذييل (نقر مزدوج للتحرير) — يتكرّر على كل صفحة",
                 editing = hfEditing == EditField.Footer,
                 onStartEditing = { onStartEditHF(EditField.Footer) },
                 modifier = Modifier.align(Alignment.TopCenter),
             )
-            if (page.showPageNumber) {
-                Text(
-                    "صفحة ١ من ${arabicDigits(pageCount)}",
-                    color = Color(0xFF555555),
-                    fontSize = 12.sp,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
-                )
-            }
+            // رقم الصفحة يُرسم تلقائياً على كل صفحة عبر Canvas (انظر drawWithContent)
         }
     }
 }
@@ -1403,6 +1424,8 @@ private fun PageSetupDialog(
     var sizeId by remember { mutableStateOf(page.currentPresetId()) }
     var landscape by remember { mutableStateOf(page.isLandscape()) }
     var rtlPage by remember { mutableStateOf(page.rtlPage) }
+    var showPn by remember { mutableStateOf(page.showPageNumber) }
+    var pnAlign by remember { mutableStateOf(page.pageNumberAlign) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1433,11 +1456,39 @@ private fun PageSetupDialog(
                     Text("اتجاه الصفحة عربي (من اليمين)", Modifier.weight(1f))
                     Switch(checked = rtlPage, onCheckedChange = { rtlPage = it })
                 }
+                HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("ترقيم الصفحات تلقائياً (رقم/إجمالي)", Modifier.weight(1f))
+                    Switch(checked = showPn, onCheckedChange = { showPn = it })
+                }
+                if (showPn) {
+                    Text("موضع رقم الصفحة", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 6.dp))
+                    Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        listOf(0 to "يمين", 1 to "وسط", 2 to "يسار").forEach { (v, lbl) ->
+                            Row(
+                                Modifier.weight(1f).clickable { pnAlign = v },
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                RadioButton(selected = pnAlign == v, onClick = { pnAlign = v })
+                                Text(lbl)
+                            }
+                        }
+                    }
+                    Text(
+                        "الأرقام تتبع لغة الصفحة: عربية عند «عربي»، وإنجليزية خلاف ذلك.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
             }
         },
         confirmButton = {
             TextButton(onClick = {
-                onApply(page.withSize(pageSizeById(sizeId), landscape).copy(rtlPage = rtlPage))
+                onApply(
+                    page.withSize(pageSizeById(sizeId), landscape)
+                        .copy(rtlPage = rtlPage, showPageNumber = showPn, pageNumberAlign = pnAlign),
+                )
             }) { Text("تطبيق") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } },
