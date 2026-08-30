@@ -91,6 +91,7 @@ import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.FormatUnderlined
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Numbers
@@ -506,6 +507,48 @@ fun EditorScreen(
         return
     }
 
+    val drawerState = androidx.compose.material3.rememberDrawerState(androidx.compose.material3.DrawerValue.Closed)
+    val drawerScope = rememberCoroutineScope()
+    androidx.compose.material3.ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            androidx.compose.material3.ModalDrawerSheet {
+                CompositionLocalProviderDir(rtl = true) {
+                    EditorDrawer(
+                        page = page,
+                        canUndo = undoStack.isNotEmpty(),
+                        canRedo = redoStack.isNotEmpty(),
+                        value = activeValue,
+                        onChange = activeOnChange,
+                        onUndo = { undo() },
+                        onRedo = { redo() },
+                        onCut = { doCut() },
+                        onCopy = { doCopy() },
+                        onPaste = { doPaste() },
+                        onSelectAll = { doSelectAll() },
+                        onFindReplace = { showFindReplace = true; focusTarget = EditField.Body },
+                        onOpen = { openLauncher.launch(arrayOf(MIME_DOCX, "application/msword", "application/pdf", "*/*")) },
+                        onSave = { persist() },
+                        onSaveAs = { showSaveAs = true },
+                        onExportPdf = { pdfLauncher.launch("${title.ifBlank { "مستند" }}.pdf") },
+                        onPageSetup = { showPageSetup = true },
+                        onTogglePageNumber = { page = page.copy(showPageNumber = !page.showPageNumber) },
+                        onToggleRuler = { showRuler = !showRuler },
+                        showRuler = showRuler,
+                        showPreview = showPreview,
+                        onTogglePreview = { showPreview = !showPreview },
+                        onStats = { showStats = true },
+                        onOpenFormatBar = { showFormatBar = true },
+                        onInsertText = { activeOnChange(RichTextOps.replaceSelection(activeValue, it)) },
+                        onInsertTable = { showInsertTable = true },
+                        onInsertImage = { imageLauncher.launch("image/*") },
+                        onDocuments = { persist(); onBack() },
+                        onDismiss = { drawerScope.launch { drawerState.close() } },
+                    )
+                }
+            }
+        },
+    ) {
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
@@ -525,8 +568,18 @@ fun EditorScreen(
                     )
                 },
                 navigationIcon = {
-                    IconButton(onClick = { persist(); onBack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "رجوع")
+                    IconButton(onClick = { drawerScope.launch { drawerState.open() } }) {
+                        Icon(Icons.Default.Menu, contentDescription = "القائمة")
+                    }
+                },
+                actions = {
+                    // مبدّل شريط التنسيق السريع (B/I/U…)
+                    Row(
+                        Modifier.clickable { showFormatBar = !showFormatBar }.padding(horizontal = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Default.FormatSize, null, tint = if (showFormatBar) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                        Icon(Icons.Default.ArrowDropDown, null, modifier = Modifier.rotate(if (showFormatBar) 180f else 0f))
                     }
                 },
             )
@@ -540,44 +593,6 @@ fun EditorScreen(
             // شريط القوائم وشريط التنسيق دائماً RTL (واجهة التطبيق عربية) بغضّ النظر عن اتجاه صفحة المستند
             CompositionLocalProviderDir(rtl = true) {
                 Column {
-                    EditorMenuBar(
-                        openMenu = openMenu,
-                        onOpenMenu = { openMenu = it },
-                        page = page,
-                        showRuler = showRuler,
-                        canUndo = undoStack.isNotEmpty(),
-                        canRedo = redoStack.isNotEmpty(),
-                        value = activeValue,
-                        onChange = activeOnChange,
-                        onUndo = { undo() },
-                        onRedo = { redo() },
-                        onCut = { doCut() },
-                        onCopy = { doCopy() },
-                        onPaste = { doPaste() },
-                        onSelectAll = { doSelectAll() },
-                        onFindReplace = { showFindReplace = true; focusTarget = EditField.Body },
-                        onOpen = { openLauncher.launch(arrayOf(MIME_DOCX, "application/msword", "*/*")) },
-                        onSave = { persist() },
-                        onSaveAs = { showSaveAs = true },
-                        onExportPdf = { pdfLauncher.launch("${title.ifBlank { "مستند" }}.pdf") },
-                        onPageSetup = { showPageSetup = true },
-                        onTogglePageNumber = { page = page.copy(showPageNumber = !page.showPageNumber) },
-                        onToggleRuler = { showRuler = !showRuler },
-                        showPreview = showPreview,
-                        onTogglePreview = { showPreview = !showPreview },
-                        onStats = { showStats = true },
-                        formatBarOpen = showFormatBar,
-                        onToggleFormatBar = { showFormatBar = !showFormatBar },
-                        onDelete = {
-                            if (activeValue.selection.start != activeValue.selection.end) {
-                                activeOnChange(RichTextOps.replaceSelection(activeValue, ""))
-                            }
-                        },
-                        onInsertText = { activeOnChange(RichTextOps.replaceSelection(activeValue, it)) },
-                        onInsertTable = { showInsertTable = true },
-                        onInsertImage = { imageLauncher.launch("image/*") },
-                        onClose = { persist(); onBack() },
-                    )
                     if (showFormatBar) FormatToolbar(value = activeValue, onChange = activeOnChange)
                     if (showFindReplace) {
                         val (mCur, mTot) = RichTextOps.matchInfo(value, findQuery, caseSensitive)
@@ -776,6 +791,7 @@ fun EditorScreen(
             }
         }
     }
+    }
 }
 
 /** يقدّر رقم الصفحة الحالية من موضع تمرير القائمة الكسولة وارتفاع الصفحة. */
@@ -954,7 +970,7 @@ private fun PageSheet(
             HeaderFooterField(
                 value = header,
                 onChange = onHeaderChange,
-                placeholder = "الترويسة (نقر مزدوج للتحرير)",
+                placeholder = "◈ الترويسة — انقر للكتابة (تتكرّر في كل صفحة عند المعاينة/PDF)",
                 editing = hfEditing == EditField.Header,
                 onStartEditing = { onStartEditHF(EditField.Header) },
                 modifier = Modifier.fillMaxWidth(),
@@ -988,7 +1004,7 @@ private fun PageSheet(
             HeaderFooterField(
                 value = footer,
                 onChange = onFooterChange,
-                placeholder = "التذييل (نقر مزدوج للتحرير) — يتكرّر على كل صفحة",
+                placeholder = "◈ التذييل — انقر للكتابة (يتكرّر في كل صفحة عند المعاينة/PDF)",
                 editing = hfEditing == EditField.Footer,
                 onStartEditing = { onStartEditHF(EditField.Footer) },
                 modifier = Modifier.align(Alignment.TopCenter),
@@ -1040,16 +1056,18 @@ private fun HeaderFooterField(
         )
         return
     }
-    // عرض مقفل: نقر مزدوج للتحرير
+    // عرض مقفل: نقرة واحدة للتحرير (منطقة مميّزة بخلفية خفيفة)
     Box(
         modifier
             .fillMaxWidth()
-            .pointerInput(Unit) { detectTapGestures(onDoubleTap = { onStartEditing() }) },
+            .background(Color(0x11000000), androidx.compose.foundation.shape.RoundedCornerShape(4.dp))
+            .clickable { onStartEditing() }
+            .padding(horizontal = 6.dp, vertical = 2.dp),
     ) {
         if (value.text.isEmpty()) {
-            Text(placeholder, color = Color(0xFFCCCCCC), fontSize = 13.sp, textAlign = TextAlign.Right, modifier = Modifier.fillMaxWidth())
+            Text(placeholder, color = Color(0xFFAAAAAA), fontSize = 12.sp, textAlign = TextAlign.Right, modifier = Modifier.fillMaxWidth())
         } else {
-            Text(value.annotatedString, fontSize = 13.sp, color = Color(0xFF777777), textAlign = TextAlign.Right, modifier = Modifier.fillMaxWidth())
+            Text(value.annotatedString, fontSize = 13.sp, color = Color(0xFF666666), textAlign = TextAlign.Right, modifier = Modifier.fillMaxWidth())
         }
     }
 }
@@ -1332,6 +1350,151 @@ private fun MenuRow(
         enabled = enabled,
         onClick = onClick,
     )
+}
+
+/** صفّ داخل القائمة الجانبية. */
+@Composable
+private fun DrawerRow(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(horizontal = 20.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        val tint = if (enabled) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.outline
+        Icon(icon, null, tint = tint)
+        Spacer(Modifier.width(14.dp))
+        Text(label, color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline)
+    }
+}
+
+/** قسم مصنّف قابل للطيّ في القائمة الجانبية (أسلوب أكورديون). */
+@Composable
+private fun DrawerSection(
+    title: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    Column(Modifier.fillMaxWidth()) {
+        Row(
+            Modifier.fillMaxWidth().clickable(onClick = onToggle).padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(icon, null, tint = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.width(12.dp))
+            Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            Icon(Icons.Default.ArrowDropDown, null, modifier = Modifier.rotate(if (expanded) 180f else 0f))
+        }
+        if (expanded) {
+            Column(Modifier.padding(bottom = 4.dp)) { content() }
+        }
+        HorizontalDivider()
+    }
+}
+
+/** القائمة الجانبية المصنّفة: كل الأوامر مبوّبة (ملف/تحرير/إدراج/تنسيق/تخطيط/عرض/أدوات). */
+@Composable
+private fun EditorDrawer(
+    page: PageSettings,
+    canUndo: Boolean,
+    canRedo: Boolean,
+    value: TextFieldValue,
+    onChange: (TextFieldValue) -> Unit,
+    onUndo: () -> Unit,
+    onRedo: () -> Unit,
+    onCut: () -> Unit,
+    onCopy: () -> Unit,
+    onPaste: () -> Unit,
+    onSelectAll: () -> Unit,
+    onFindReplace: () -> Unit,
+    onOpen: () -> Unit,
+    onSave: () -> Unit,
+    onSaveAs: () -> Unit,
+    onExportPdf: () -> Unit,
+    onPageSetup: () -> Unit,
+    onTogglePageNumber: () -> Unit,
+    onToggleRuler: () -> Unit,
+    showRuler: Boolean,
+    showPreview: Boolean,
+    onTogglePreview: () -> Unit,
+    onStats: () -> Unit,
+    onOpenFormatBar: () -> Unit,
+    onInsertText: (String) -> Unit,
+    onInsertTable: () -> Unit,
+    onInsertImage: () -> Unit,
+    onDocuments: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var open by remember { mutableStateOf("ملف") }
+    fun sec(name: String) { open = if (open == name) "" else name }
+    fun act(block: () -> Unit): () -> Unit = { block(); onDismiss() }
+
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+        Text(
+            "مكتبي",
+            style = MaterialTheme.typography.headlineSmall,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(20.dp),
+        )
+        HorizontalDivider()
+        DrawerSection("ملف", Icons.Default.Folder, open == "ملف", { sec("ملف") }) {
+            DrawerRow("فتح (Word / PDF)", Icons.Default.FolderOpen, onClick = act(onOpen))
+            DrawerRow("حفظ", Icons.Default.Save, onClick = act(onSave))
+            DrawerRow("حفظ باسم…", Icons.Default.SaveAs, onClick = act(onSaveAs))
+            DrawerRow("تصدير PDF", Icons.Default.PictureAsPdf, onClick = act(onExportPdf))
+            DrawerRow("مستنداتي", Icons.Default.Folder, onClick = act(onDocuments))
+        }
+        DrawerSection("تحرير", Icons.Default.ContentCopy, open == "تحرير", { sec("تحرير") }) {
+            DrawerRow("تراجع", Icons.AutoMirrored.Filled.Undo, enabled = canUndo, onClick = act(onUndo))
+            DrawerRow("إعادة", Icons.AutoMirrored.Filled.Redo, enabled = canRedo, onClick = act(onRedo))
+            DrawerRow("قص", Icons.Default.ContentCut, onClick = act(onCut))
+            DrawerRow("نسخ", Icons.Default.ContentCopy, onClick = act(onCopy))
+            DrawerRow("لصق", Icons.Default.ContentPaste, onClick = act(onPaste))
+            DrawerRow("تحديد الكل", Icons.Default.SelectAll, onClick = act(onSelectAll))
+            DrawerRow("بحث واستبدال", Icons.Default.Search, onClick = act(onFindReplace))
+        }
+        DrawerSection("إدراج", Icons.Default.Add, open == "إدراج", { sec("إدراج") }) {
+            DrawerRow("جدول", Icons.Default.TableChart, onClick = act(onInsertTable))
+            DrawerRow("صورة", Icons.Default.Image, onClick = act(onInsertImage))
+            DrawerRow("التاريخ", Icons.Default.DateRange, onClick = act { onInsertText(currentDateString()) })
+            DrawerRow("الوقت", Icons.Default.Schedule, onClick = act { onInsertText(currentTimeString()) })
+        }
+        DrawerSection("تنسيق", Icons.Default.FormatSize, open == "تنسيق", { sec("تنسيق") }) {
+            DrawerRow("شريط التنسيق (خط/حجم/لون…)", Icons.Default.FormatSize, onClick = act(onOpenFormatBar))
+            DrawerRow("محاذاة يمين", Icons.AutoMirrored.Filled.FormatAlignRight, onClick = act { onChange(RichTextOps.setAlign(value, TextAlign.Right)) })
+            DrawerRow("توسيط", Icons.Default.FormatAlignCenter, onClick = act { onChange(RichTextOps.setAlign(value, TextAlign.Center)) })
+            DrawerRow("محاذاة يسار", Icons.AutoMirrored.Filled.FormatAlignLeft, onClick = act { onChange(RichTextOps.setAlign(value, TextAlign.Left)) })
+            DrawerRow("ضبط", Icons.Default.FormatAlignJustify, onClick = act { onChange(RichTextOps.setAlign(value, TextAlign.Justify)) })
+            DrawerRow("قائمة نقطية", Icons.AutoMirrored.Filled.FormatListBulleted, onClick = act { onChange(RichTextOps.applyList(value, RichTextOps.ListSpec(numbered = false, glyph = "•"))) })
+            DrawerRow("قائمة مرقّمة", Icons.Default.FormatListNumbered, onClick = act { onChange(RichTextOps.applyList(value, RichTextOps.ListSpec(numbered = true, sep = "."))) })
+            DrawerRow("مسح التنسيق", Icons.Default.FormatColorReset, onClick = act { onChange(RichTextOps.clearFormatting(value)) })
+        }
+        DrawerSection("تخطيط", Icons.Default.AspectRatio, open == "تخطيط", { sec("تخطيط") }) {
+            DrawerRow("إعداد الصفحة", Icons.Default.AspectRatio, onClick = act(onPageSetup))
+            DrawerRow(if (page.showPageNumber) "إخفاء ترقيم الصفحات" else "إظهار ترقيم الصفحات", Icons.Default.Numbers, onClick = act(onTogglePageNumber))
+            DrawerRow("زيادة المسافة البادئة", Icons.AutoMirrored.Filled.FormatIndentIncrease, onClick = act { onChange(RichTextOps.changeIndent(value, +1)) })
+            DrawerRow("إنقاص المسافة البادئة", Icons.AutoMirrored.Filled.FormatIndentDecrease, onClick = act { onChange(RichTextOps.changeIndent(value, -1)) })
+            DrawerRow("تباعد مفرد", Icons.Default.FormatLineSpacing, onClick = act { onChange(RichTextOps.setLineSpacing(value, 1.0f)) })
+            DrawerRow("تباعد ١٫٥", Icons.Default.FormatLineSpacing, onClick = act { onChange(RichTextOps.setLineSpacing(value, 1.5f)) })
+            DrawerRow("تباعد مزدوج", Icons.Default.FormatLineSpacing, onClick = act { onChange(RichTextOps.setLineSpacing(value, 2.0f)) })
+        }
+        DrawerSection("عرض", Icons.Default.Straighten, open == "عرض", { sec("عرض") }) {
+            DrawerRow(if (showPreview) "وضع التحرير" else "معاينة الطباعة (صفحات حقيقية)", Icons.Default.Straighten, onClick = act(onTogglePreview))
+            DrawerRow(if (showRuler) "إخفاء المسطرة" else "إظهار المسطرة", Icons.Default.Straighten, onClick = act(onToggleRuler))
+        }
+        DrawerSection("أدوات", Icons.AutoMirrored.Filled.Notes, open == "أدوات", { sec("أدوات") }) {
+            DrawerRow("إحصائيات المستند", Icons.AutoMirrored.Filled.Notes, onClick = act(onStats))
+        }
+        Spacer(Modifier.height(24.dp))
+    }
 }
 
 /** مربّع اختيار عدد صفوف/أعمدة الجدول عند الإدراج (متغيّر). */
