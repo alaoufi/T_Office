@@ -128,6 +128,7 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -677,7 +678,13 @@ fun EditorScreen(
                     // اتجاه المسطرة يتبع اتجاه الصفحة (ثابت لا يتأثر بالتنسيق)
                     val rulerRtl = page.rtlPage
                     // عرض كسول: لا تُركَّب/تُقاس إلا الكتل المرئية — يمنع تجمّد المستندات الكبيرة
-                    LazyColumn(Modifier.fillMaxSize()) {
+                    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+                    val pageHeightPx = pageHeightDp * density
+                    val curPage by remember(pageHeightPx, docPages) {
+                        derivedStateOf { currentPageOf(listState, pageHeightPx, docPages) }
+                    }
+                    Box(Modifier.fillMaxSize()) {
+                    LazyColumn(Modifier.fillMaxSize(), state = listState) {
                         if (showRuler) {
                             item(key = "hruler") {
                                 Row {
@@ -745,11 +752,47 @@ fun EditorScreen(
                         }
                         item(key = "tail") { Spacer(Modifier.height(24.dp)) }
                     }
+                    // مؤشّر الصفحة الحيّ أثناء التحرير/التمرير
+                    if (docPages > 1) {
+                        val useAr = page.rtlPage
+                        fun d(n: Int) = if (useAr) arabicDigits(n) else n.toString()
+                        Surface(
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+                            shadowElevation = 3.dp,
+                            modifier = Modifier.align(Alignment.BottomStart).padding(12.dp),
+                        ) {
+                            Text(
+                                "صفحة ${d(curPage)} / ${d(docPages)}",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            )
+                        }
+                    }
+                    }
                   }
                 }
             }
         }
     }
+}
+
+/** يقدّر رقم الصفحة الحالية من موضع تمرير القائمة الكسولة وارتفاع الصفحة. */
+private fun currentPageOf(
+    listState: androidx.compose.foundation.lazy.LazyListState,
+    pageHeightPx: Float,
+    totalPages: Int,
+): Int {
+    if (pageHeightPx <= 0f) return 1
+    val info = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.key == "sheet" }
+    val page = if (info != null) {
+        ((-info.offset).coerceAtLeast(0) / pageHeightPx).toInt() + 1
+    } else {
+        // الورقة فوق حدّ الرؤية (نمرّر في الكتل بعدها) → قرب النهاية
+        totalPages
+    }
+    return page.coerceIn(1, totalPages.coerceAtLeast(1))
 }
 
 /** معاينة الطباعة: صفحات A4 حقيقية بفجوة بينها + ترويسة/تذييل/رقم صفحة لكل صفحة. */
