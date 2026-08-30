@@ -154,6 +154,15 @@ object RichTextOps {
         }
     }
 
+    /** يمسح كل تنسيق الحروف على التحديد (غامق/مائل/لون/حجم/خط…) ويعيده للافتراضي. */
+    fun clearFormatting(v: TextFieldValue): TextFieldValue {
+        val (s, e) = bounds(v)
+        if (s >= e) return v
+        return rebuild(v) { attrs, _, _ ->
+            for (i in s until e) attrs[i] = CharAttrs()
+        }
+    }
+
     // ---- البحث والاستبدال ----
 
     /** مواضع كل تطابقات النص (غير متداخلة). */

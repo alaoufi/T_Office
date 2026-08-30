@@ -112,6 +112,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.MaterialTheme
@@ -187,8 +188,22 @@ import com.toffice.app.feature.editor.ui.HorizontalRuler
 import com.toffice.app.feature.editor.ui.VerticalRuler
 
 private val SWATCHES = listOf(
-    0xFF000000.toInt(), 0xFFD32F2F.toInt(), 0xFF1565C0.toInt(),
-    0xFF2E7D32.toInt(), 0xFFEF6C00.toInt(), 0xFF6A1B9A.toInt(),
+    // رماديات
+    0xFF000000.toInt(), 0xFF424242.toInt(), 0xFF757575.toInt(), 0xFF9E9E9E.toInt(), 0xFFBDBDBD.toInt(), 0xFFFFFFFF.toInt(),
+    // أحمر/وردي
+    0xFFB71C1C.toInt(), 0xFFD32F2F.toInt(), 0xFFF44336.toInt(), 0xFFE91E63.toInt(), 0xFFAD1457.toInt(), 0xFFFF8A80.toInt(),
+    // برتقالي/أصفر
+    0xFFEF6C00.toInt(), 0xFFFF9800.toInt(), 0xFFFFB300.toInt(), 0xFFFDD835.toInt(), 0xFFFFF176.toInt(), 0xFF795548.toInt(),
+    // أخضر
+    0xFF1B5E20.toInt(), 0xFF2E7D32.toInt(), 0xFF43A047.toInt(), 0xFF7CB342.toInt(), 0xFF00897B.toInt(), 0xFF00BCD4.toInt(),
+    // أزرق/بنفسجي
+    0xFF0D47A1.toInt(), 0xFF1565C0.toInt(), 0xFF1E88E5.toInt(), 0xFF3949AB.toInt(), 0xFF6A1B9A.toInt(), 0xFF8E24AA.toInt(),
+)
+
+/** ألوان تظليل شائعة (فاتحة). */
+private val HIGHLIGHTS = listOf(
+    0xFFFFF176.toInt(), 0xFFFFF59D.toInt(), 0xFFA5D6A7.toInt(), 0xFF80DEEA.toInt(),
+    0xFF90CAF9.toInt(), 0xFFCE93D8.toInt(), 0xFFFFAB91.toInt(), 0xFFEEEEEE.toInt(),
 )
 
 /** حالة كتلة في واجهة المحرّر (بعد المتن الرئيسي): نص قابل للتحرير أو جدول أو صورة. */
@@ -321,6 +336,8 @@ fun EditorScreen(
     var showMenu by remember { mutableStateOf(false) }
     var showPageSetup by remember { mutableStateOf(false) }
     var showSaveAs by remember { mutableStateOf(false) }
+    var showStats by remember { mutableStateOf(false) }
+    var docPages by remember { mutableStateOf(1) }
     var openMenu by remember { mutableStateOf<String?>(null) }
     var showRuler by remember { mutableStateOf(true) }
     var showPreview by remember { mutableStateOf(false) }
@@ -529,8 +546,7 @@ fun EditorScreen(
                         onToggleRuler = { showRuler = !showRuler },
                         showPreview = showPreview,
                         onTogglePreview = { showPreview = !showPreview },
-                        onWordCount = { viewModel.notify("عدد الكلمات: ${arabicDigits(wordCount(value.text))}") },
-                        onCharCount = { viewModel.notify("عدد الأحرف: ${arabicDigits(value.text.length)}") },
+                        onStats = { showStats = true },
                         onDelete = {
                             if (activeValue.selection.start != activeValue.selection.end) {
                                 activeOnChange(RichTextOps.replaceSelection(activeValue, ""))
@@ -566,6 +582,20 @@ fun EditorScreen(
                     page = page,
                     onDismiss = { showPageSetup = false },
                     onApply = { newPage -> page = newPage; showPageSetup = false },
+                )
+            }
+
+            if (showStats) {
+                val fullText = buildString {
+                    append(value.text)
+                    extraBlocks.forEach { if (it is TextBlockUi) { append('\n'); append(it.value.text) } }
+                }
+                StatsDialog(
+                    words = wordCount(fullText),
+                    chars = fullText.length,
+                    charsNoSpace = fullText.count { !it.isWhitespace() },
+                    pages = docPages,
+                    onDismiss = { showStats = false },
                 )
             }
 
@@ -616,6 +646,7 @@ fun EditorScreen(
                     // ارتفاع المحتوى الفعلي (لا يقل عن صفحة) وعدد الصفحات — يمنع اختفاء المسطرة الرأسية
                     val sheetHeightDp = maxOf(pageHeightDp, if (sheetHeightPx > 0) sheetHeightPx / density else pageHeightDp)
                     val pageCount = paginationPageCount(sheetHeightDp, pageHeightDp)
+                    LaunchedEffect(pageCount) { docPages = pageCount }
 
                     // اتجاه المسطرة يتبع اتجاه الصفحة (ثابت لا يتأثر بالتنسيق)
                     val rulerRtl = page.rtlPage
@@ -1095,8 +1126,7 @@ private fun EditorMenuBar(
     onToggleRuler: () -> Unit,
     showPreview: Boolean,
     onTogglePreview: () -> Unit,
-    onWordCount: () -> Unit,
-    onCharCount: () -> Unit,
+    onStats: () -> Unit,
     onDelete: () -> Unit,
     onInsertText: (String) -> Unit,
     onInsertTable: () -> Unit,
@@ -1182,8 +1212,7 @@ private fun EditorMenuBar(
             MenuRow(if (showRuler) "إخفاء المسطرة" else "إظهار المسطرة", Icons.Default.Straighten) { close(); onToggleRuler() }
         }
         MenuBarMenu("أدوات", openMenu, onOpenMenu) { close ->
-            MenuRow("عدد الكلمات", Icons.AutoMirrored.Filled.Notes) { close(); onWordCount() }
-            MenuRow("عدد الأحرف", Icons.AutoMirrored.Filled.Notes) { close(); onCharCount() }
+            MenuRow("إحصائيات المستند", Icons.AutoMirrored.Filled.Notes) { close(); onStats() }
         }
         }
     }
@@ -1538,7 +1567,8 @@ private fun FormatToolbar(value: TextFieldValue, onChange: (TextFieldValue) -> U
 
     var fontMenu by remember { mutableStateOf(false) }
     var sizeMenu by remember { mutableStateOf(false) }
-    var colorMenu by remember { mutableStateOf(false) }
+    var textColorPicker by remember { mutableStateOf(false) }
+    var highlightPicker by remember { mutableStateOf(false) }
     var alignMenu by remember { mutableStateOf(false) }
     var dirMenu by remember { mutableStateOf(false) }
     var spacingMenu by remember { mutableStateOf(false) }
@@ -1608,18 +1638,17 @@ private fun FormatToolbar(value: TextFieldValue, onChange: (TextFieldValue) -> U
         }
         ToolDivider()
 
-        // لون النص (قائمة)
-        Box {
-            IconButton(onClick = { colorMenu = true }) {
-                Icon(Icons.Default.FormatColorText, "لون النص", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            DropdownMenu(expanded = colorMenu, onDismissRequest = { colorMenu = false }) {
-                Row(Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
-                    SWATCHES.forEach { argb ->
-                        ColorSwatch(Color(argb)) { onChange(RichTextOps.setColor(value, argb)); colorMenu = false }
-                    }
-                }
-            }
+        // لون النص (منتقي كامل)
+        IconButton(onClick = { textColorPicker = true }) {
+            Icon(Icons.Default.FormatColorText, "لون النص", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        // تظليل (منتقي كامل)
+        IconButton(onClick = { highlightPicker = true }) {
+            Icon(Icons.Default.FormatColorFill, "تظليل", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        // مسح التنسيق
+        IconButton(onClick = { onChange(RichTextOps.clearFormatting(value)) }) {
+            Icon(Icons.Default.FormatColorReset, "مسح التنسيق", tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         ToolDivider()
 
@@ -1697,6 +1726,26 @@ private fun FormatToolbar(value: TextFieldValue, onChange: (TextFieldValue) -> U
         ListPickerDialog(
             onPick = { spec -> onChange(RichTextOps.applyList(value, spec)); listDialog = false },
             onDismiss = { listDialog = false },
+        )
+    }
+    if (textColorPicker) {
+        ColorPickerDialog(
+            title = "لون النص",
+            initialArgb = cur.colorArgb,
+            presets = SWATCHES,
+            allowNone = false,
+            onPick = { argb -> onChange(RichTextOps.setColor(value, argb)); textColorPicker = false },
+            onDismiss = { textColorPicker = false },
+        )
+    }
+    if (highlightPicker) {
+        ColorPickerDialog(
+            title = "لون التظليل",
+            initialArgb = cur.highlightArgb,
+            presets = HIGHLIGHTS,
+            allowNone = true,
+            onPick = { argb -> onChange(RichTextOps.setHighlight(value, argb)); highlightPicker = false },
+            onDismiss = { highlightPicker = false },
         )
     }
 }
@@ -1839,4 +1888,103 @@ private fun ColorSwatch(color: Color, onClick: () -> Unit) {
             .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
             .clickable(onClick = onClick),
     )
+}
+
+/**
+ * منتقي ألوان احترافي: شبكة ألوان جاهزة + منزلقات RGB + معاينة، مع خيار «بلا لون».
+ * يُرجِع 0 عند اختيار «بلا لون».
+ */
+@Composable
+private fun ColorPickerDialog(
+    title: String,
+    initialArgb: Int,
+    presets: List<Int>,
+    allowNone: Boolean,
+    onPick: (Int) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val start = if (initialArgb != 0) initialArgb else 0xFF000000.toInt()
+    var r by remember { mutableStateOf(((start shr 16) and 0xFF).toFloat()) }
+    var g by remember { mutableStateOf(((start shr 8) and 0xFF).toFloat()) }
+    var b by remember { mutableStateOf((start and 0xFF).toFloat()) }
+    val current = (0xFF000000.toInt()) or (r.toInt() shl 16) or (g.toInt() shl 8) or b.toInt()
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                // شبكة الألوان الجاهزة (٦ لكل صف)
+                presets.chunked(6).forEach { rowColors ->
+                    Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                        rowColors.forEach { argb ->
+                            Box(
+                                Modifier
+                                    .size(30.dp)
+                                    .background(Color(argb), RoundedCornerShape(6.dp))
+                                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(6.dp))
+                                    .clickable {
+                                        r = ((argb shr 16) and 0xFF).toFloat()
+                                        g = ((argb shr 8) and 0xFF).toFloat()
+                                        b = (argb and 0xFF).toFloat()
+                                    },
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
+                // معاينة + منزلقات RGB
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        Modifier.size(40.dp)
+                            .background(Color(current), RoundedCornerShape(8.dp))
+                            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp)),
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text("لون مخصّص (RGB)", style = MaterialTheme.typography.labelLarge)
+                }
+                Text("أحمر ${r.toInt()}", style = MaterialTheme.typography.bodySmall)
+                Slider(value = r, onValueChange = { r = it }, valueRange = 0f..255f)
+                Text("أخضر ${g.toInt()}", style = MaterialTheme.typography.bodySmall)
+                Slider(value = g, onValueChange = { g = it }, valueRange = 0f..255f)
+                Text("أزرق ${b.toInt()}", style = MaterialTheme.typography.bodySmall)
+                Slider(value = b, onValueChange = { b = it }, valueRange = 0f..255f)
+            }
+        },
+        confirmButton = { TextButton(onClick = { onPick(current) }) { Text("تطبيق") } },
+        dismissButton = {
+            Row {
+                if (allowNone) {
+                    TextButton(onClick = { onPick(0) }) { Text("بلا لون") }
+                }
+                TextButton(onClick = onDismiss) { Text("إلغاء") }
+            }
+        },
+    )
+}
+
+/** إحصائيات المستند: الكلمات والأحرف والصفحات. */
+@Composable
+private fun StatsDialog(words: Int, chars: Int, charsNoSpace: Int, pages: Int, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("إحصائيات المستند") },
+        text = {
+            Column {
+                StatRow("عدد الكلمات", arabicDigits(words))
+                StatRow("عدد الأحرف (مع المسافات)", arabicDigits(chars))
+                StatRow("عدد الأحرف (بلا مسافات)", arabicDigits(charsNoSpace))
+                StatRow("عدد الصفحات", arabicDigits(pages))
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("حسناً") } },
+    )
+}
+
+@Composable
+private fun StatRow(label: String, value: String) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, Modifier.weight(1f))
+        Text(value, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+    }
 }
