@@ -8,9 +8,11 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import com.toffice.app.feature.editor.io.ImageStore
+import com.toffice.app.feature.editor.model.CharAttrs
 import com.toffice.app.feature.editor.model.DocBlock
 import com.toffice.app.feature.editor.model.DocImage
 import com.toffice.app.feature.editor.model.ImageBlock
@@ -346,6 +348,7 @@ fun EditorScreen(
     var showFindReplace by remember { mutableStateOf(false) }
     var findQuery by remember { mutableStateOf("") }
     var replaceQuery by remember { mutableStateOf("") }
+    var caseSensitive by remember { mutableStateOf(false) }
 
     // قائمة الكتل الكاملة (للحفظ/التصدير): المتن الرئيسي ثم كتل ما بعده بالترتيب
     fun allBlocks(): List<DocBlock> = buildList {
@@ -573,15 +576,21 @@ fun EditorScreen(
                     )
                     FormatToolbar(value = activeValue, onChange = activeOnChange)
                     if (showFindReplace) {
+                        val (mCur, mTot) = RichTextOps.matchInfo(value, findQuery, caseSensitive)
                         FindReplaceBar(
                             find = findQuery,
                             onFind = { findQuery = it },
                             replace = replaceQuery,
                             onReplace = { replaceQuery = it },
-                            onNext = { value = RichTextOps.findNext(value, findQuery) },
-                            onReplaceOne = { value = RichTextOps.replaceCurrent(value, findQuery, replaceQuery) },
+                            matchCurrent = mCur,
+                            matchTotal = mTot,
+                            caseSensitive = caseSensitive,
+                            onToggleCase = { caseSensitive = !caseSensitive },
+                            onPrev = { value = RichTextOps.findPrev(value, findQuery, caseSensitive) },
+                            onNext = { value = RichTextOps.findNext(value, findQuery, caseSensitive) },
+                            onReplaceOne = { value = RichTextOps.replaceCurrent(value, findQuery, replaceQuery, caseSensitive) },
                             onReplaceAll = {
-                                val (nv, count) = RichTextOps.replaceAll(value, findQuery, replaceQuery)
+                                val (nv, count) = RichTextOps.replaceAll(value, findQuery, replaceQuery, caseSensitive)
                                 update(nv)
                                 viewModel.notify("تم استبدال ${arabicDigits(count)}")
                             },
@@ -1076,6 +1085,11 @@ private fun FindReplaceBar(
     onFind: (String) -> Unit,
     replace: String,
     onReplace: (String) -> Unit,
+    matchCurrent: Int,
+    matchTotal: Int,
+    caseSensitive: Boolean,
+    onToggleCase: () -> Unit,
+    onPrev: () -> Unit,
     onNext: () -> Unit,
     onReplaceOne: () -> Unit,
     onReplaceAll: () -> Unit,
@@ -1091,16 +1105,31 @@ private fun FindReplaceBar(
                 onValueChange = onFind,
                 placeholder = { Text("بحث") },
                 singleLine = true,
-                modifier = Modifier.width(170.dp),
+                modifier = Modifier.width(150.dp),
             )
-            IconButton(onClick = onNext) { Icon(Icons.Default.Search, contentDescription = "التالي") }
+            // عدّاد النتائج «الحالي/الإجمالي»
+            Text(
+                if (matchTotal > 0) " ${arabicDigits(matchCurrent)}/${arabicDigits(matchTotal)} " else " ٠ ",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            IconButton(onClick = onPrev) { Icon(Icons.Default.ArrowDropDown, contentDescription = "السابق", modifier = Modifier.rotate(180f)) }
+            IconButton(onClick = onNext) { Icon(Icons.Default.ArrowDropDown, contentDescription = "التالي") }
+            // حسّاس لحالة الأحرف (Aa)
+            IconButton(onClick = onToggleCase) {
+                Text(
+                    "Aa",
+                    color = if (caseSensitive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = if (caseSensitive) FontWeight.Bold else FontWeight.Normal,
+                )
+            }
             Spacer(Modifier.width(8.dp))
             OutlinedTextField(
                 value = replace,
                 onValueChange = onReplace,
                 placeholder = { Text("استبدال بـ") },
                 singleLine = true,
-                modifier = Modifier.width(170.dp),
+                modifier = Modifier.width(150.dp),
             )
             TextButton(onClick = onReplaceOne) { Text("استبدال") }
             TextButton(onClick = onReplaceAll) { Text("الكل") }
@@ -1588,6 +1617,7 @@ private fun FormatToolbar(value: TextFieldValue, onChange: (TextFieldValue) -> U
     var spacingMenu by remember { mutableStateOf(false) }
     var listDialog by remember { mutableStateOf(false) }
     var moreMenu by remember { mutableStateOf(false) }
+    var copiedFormat by remember { mutableStateOf<CharAttrs?>(null) }
 
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -1731,6 +1761,15 @@ private fun FormatToolbar(value: TextFieldValue, onChange: (TextFieldValue) -> U
                 MenuChoice("منخفض X₂", Icons.Default.Subscript, cur.script == 2) { onChange(RichTextOps.toggleScript(value, 2)); moreMenu = false }
                 MenuChoice("تظليل أصفر", Icons.Default.FormatColorFill, cur.highlightArgb != 0) { onChange(RichTextOps.setHighlight(value, 0xFFFFEB3B.toInt())); moreMenu = false }
                 MenuChoice("إزالة التظليل", Icons.Default.FormatColorReset, false) { onChange(RichTextOps.setHighlight(value, 0)); moreMenu = false }
+                HorizontalDivider()
+                MenuChoice("نسخ التنسيق (فرشاة)", Icons.Default.ContentCopy, copiedFormat != null) {
+                    copiedFormat = cur; moreMenu = false
+                }
+                if (copiedFormat != null) {
+                    MenuChoice("لصق التنسيق على التحديد", Icons.Default.ContentPaste, false) {
+                        onChange(RichTextOps.applyCharAttrs(value, copiedFormat!!)); moreMenu = false
+                    }
+                }
             }
         }
     }

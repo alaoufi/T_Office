@@ -163,6 +163,15 @@ object RichTextOps {
         }
     }
 
+    /** يطبّق تنسيق حروف مُحدّداً على التحديد (فرشاة نسخ التنسيق). */
+    fun applyCharAttrs(v: TextFieldValue, a: CharAttrs): TextFieldValue {
+        val (s, e) = bounds(v)
+        if (s >= e) return v
+        return rebuild(v) { attrs, _, _ ->
+            for (i in s until e) attrs[i] = a
+        }
+    }
+
     // ---- البحث والاستبدال ----
 
     /** مواضع كل تطابقات النص (غير متداخلة). */
@@ -186,6 +195,24 @@ object RichTextOps {
         val from = maxOf(v.selection.start, v.selection.end)
         val next = ranges.firstOrNull { it.first >= from } ?: ranges.first()
         return v.copy(selection = TextRange(next.first, next.last + 1))
+    }
+
+    /** ينتقل إلى التطابق السابق قبل التحديد الحالي (مع الالتفاف). */
+    fun findPrev(v: TextFieldValue, query: String, caseSensitive: Boolean = false): TextFieldValue {
+        val ranges = findRanges(v.annotatedString.text, query, caseSensitive)
+        if (ranges.isEmpty()) return v
+        val before = minOf(v.selection.start, v.selection.end)
+        val prev = ranges.lastOrNull { it.last + 1 <= before } ?: ranges.last()
+        return v.copy(selection = TextRange(prev.first, prev.last + 1))
+    }
+
+    /** رقم التطابق الحالي (1-based) وإجمالي التطابقات، لعرض «n/الإجمالي». */
+    fun matchInfo(v: TextFieldValue, query: String, caseSensitive: Boolean = false): Pair<Int, Int> {
+        val ranges = findRanges(v.annotatedString.text, query, caseSensitive)
+        if (ranges.isEmpty()) return 0 to 0
+        val s = minOf(v.selection.start, v.selection.end)
+        val idx = ranges.indexOfFirst { it.first == s && v.selection.end == it.last + 1 }
+        return (if (idx >= 0) idx + 1 else 0) to ranges.size
     }
 
     private fun replaceRange(v: TextFieldValue, s: Int, e: Int, replacement: String): TextFieldValue {
