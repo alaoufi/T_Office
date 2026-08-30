@@ -342,6 +342,7 @@ fun EditorScreen(
     var showSaveAs by remember { mutableStateOf(false) }
     var showStats by remember { mutableStateOf(false) }
     var docPages by remember { mutableStateOf(1) }
+    var showFormatBar by remember { mutableStateOf(false) } // شريط التنسيق يُفتح عند الطلب
     var openMenu by remember { mutableStateOf<String?>(null) }
     var showRuler by remember { mutableStateOf(true) }
     var showPreview by remember { mutableStateOf(false) }
@@ -564,6 +565,8 @@ fun EditorScreen(
                         showPreview = showPreview,
                         onTogglePreview = { showPreview = !showPreview },
                         onStats = { showStats = true },
+                        formatBarOpen = showFormatBar,
+                        onToggleFormatBar = { showFormatBar = !showFormatBar },
                         onDelete = {
                             if (activeValue.selection.start != activeValue.selection.end) {
                                 activeOnChange(RichTextOps.replaceSelection(activeValue, ""))
@@ -574,7 +577,7 @@ fun EditorScreen(
                         onInsertImage = { imageLauncher.launch("image/*") },
                         onClose = { persist(); onBack() },
                     )
-                    FormatToolbar(value = activeValue, onChange = activeOnChange)
+                    if (showFormatBar) FormatToolbar(value = activeValue, onChange = activeOnChange)
                     if (showFindReplace) {
                         val (mCur, mTot) = RichTextOps.matchInfo(value, findQuery, caseSensitive)
                         FindReplaceBar(
@@ -873,61 +876,46 @@ private fun PageSheet(
                 if (botY > topY) {
                     drawLine(dashColor, Offset(mlDp * density, botY), Offset(size.width - mrDp * density, botY), strokeWidth = 1f, pathEffect = dash)
                 }
-                // فواصل صفحات ثلاثية الأبعاد (ظل + فجوة) مع شارة «صفحة X من Y»
                 val pageH = pageHeightDp * density
-                val totalLabel = arabicDigits(pageCount)
-                val chip = android.graphics.Paint().apply {
-                    color = android.graphics.Color.WHITE
-                    textSize = 10f * density
-                    isAntiAlias = true
-                    textAlign = android.graphics.Paint.Align.CENTER
-                }
-                // فاصل صفحات واضح لكن رفيع (لا يُخفي سطراً) + شارة رقم الصفحة عند الحافة
-                val sep = Color(0xFF5C6BC0)
-                for (p in 1 until pageCount) {
-                    val y = p * pageH
-                    if (y >= size.height) break
-                    drawLine(sep, Offset(0f, y), Offset(size.width, y), strokeWidth = 3f * density)
-                    val label = "صفحة ${arabicDigits(p + 1)} من $totalLabel"
-                    val chipW = chip.measureText(label) + 16f * density
-                    val chipH = 16f * density
-                    val cxChip = chipW / 2f + 6f * density // عند الحافة اليسرى (الهامش غالباً فارغ)
-                    drawRoundRect(
-                        color = sep,
-                        topLeft = Offset(cxChip - chipW / 2f, y - chipH / 2f),
-                        size = Size(chipW, chipH),
-                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(chipH / 2f, chipH / 2f),
-                    )
-                    drawContext.canvas.nativeCanvas.drawText(label, cxChip, y + 4f * density, chip)
-                }
-                // تذييل متكرّر على كل صفحة + رقم صفحة تلقائي (بموضع اللغة والأرقام حسب اتجاه الصفحة)
+                // فجوة رمادية واضحة بين الصفحات (كوورد) تحتوي التذييل ورقم الصفحة بعيداً عن جسم النص
                 val useArabic = page.rtlPage
                 fun digits(n: Int) = if (useArabic) arabicDigits(n) else n.toString()
                 val footerText = footer.annotatedString.text.replace("\n", " ").trim()
+                val gapColor = Color(0xFFD7DBE2)
+                val edge = Color(0x33000000)
+                val gapH = 36f * density
                 val fPaint = android.graphics.Paint().apply {
-                    color = android.graphics.Color.parseColor("#555555")
-                    textSize = 12f * density
+                    color = android.graphics.Color.parseColor("#444444")
+                    textSize = 11f * density
                     isAntiAlias = true
                 }
-                for (p in 0 until pageCount) {
-                    val bandBottom = (p + 1) * pageH
-                    // نصّ التذييل (يتكرّر) — عدا الصفحة الأخيرة (يظهر فيها الحقل القابل للتحرير)
-                    if (footerText.isNotEmpty() && p < pageCount - 1) {
+                fun drawPageNumber(cy: Float, num: Int) {
+                    val pnLabel = "${digits(num)} / ${digits(pageCount)}"
+                    val x = when (page.pageNumberAlign) {
+                        0 -> { fPaint.textAlign = android.graphics.Paint.Align.RIGHT; size.width - mrDp * density }
+                        2 -> { fPaint.textAlign = android.graphics.Paint.Align.LEFT; mlDp * density }
+                        else -> { fPaint.textAlign = android.graphics.Paint.Align.CENTER; size.width / 2f }
+                    }
+                    drawContext.canvas.nativeCanvas.drawText(pnLabel, x, cy, fPaint)
+                }
+                for (p in 1 until pageCount) {
+                    val y = p * pageH
+                    if (y >= size.height) break
+                    val top = y - gapH / 2f
+                    // خطّ فاصل بين جسم الصفحة والتذييل، ثم الفجوة الرمادية، ثم خطّ قبل الصفحة التالية
+                    drawLine(edge, Offset(0f, top), Offset(size.width, top), strokeWidth = 1f)
+                    drawRect(color = gapColor, topLeft = Offset(0f, top), size = Size(size.width, gapH))
+                    drawLine(edge, Offset(0f, top + gapH), Offset(size.width, top + gapH), strokeWidth = 1f)
+                    // التذييل (سطر أعلى الفجوة) ثم رقم الصفحة (سطر أسفلها)
+                    if (footerText.isNotEmpty()) {
                         fPaint.textAlign = android.graphics.Paint.Align.CENTER
-                        drawContext.canvas.nativeCanvas.drawText(
-                            footerText, size.width / 2f, bandBottom - mbDp * density + 16f * density, fPaint,
-                        )
+                        drawContext.canvas.nativeCanvas.drawText(footerText, size.width / 2f, top + 14f * density, fPaint)
                     }
-                    // رقم الصفحة: «رقم / إجمالي» حسب الموضع المختار
-                    if (page.showPageNumber) {
-                        val pnLabel = "${digits(p + 1)} / ${digits(pageCount)}"
-                        val x = when (page.pageNumberAlign) {
-                            0 -> { fPaint.textAlign = android.graphics.Paint.Align.RIGHT; size.width - mrDp * density }
-                            2 -> { fPaint.textAlign = android.graphics.Paint.Align.LEFT; mlDp * density }
-                            else -> { fPaint.textAlign = android.graphics.Paint.Align.CENTER; size.width / 2f }
-                        }
-                        drawContext.canvas.nativeCanvas.drawText(pnLabel, x, bandBottom - 8f * density, fPaint)
-                    }
+                    if (page.showPageNumber) drawPageNumber(top + 30f * density, p)
+                }
+                // رقم صفحة الورقة الأخيرة (لا فجوة بعدها) في هامشها السفلي
+                if (page.showPageNumber && pageCount >= 1) {
+                    drawPageNumber(size.height - mbDp * density + 14f * density, pageCount)
                 }
             },
     ) {
@@ -1170,6 +1158,8 @@ private fun EditorMenuBar(
     showPreview: Boolean,
     onTogglePreview: () -> Unit,
     onStats: () -> Unit,
+    formatBarOpen: Boolean,
+    onToggleFormatBar: () -> Unit,
     onDelete: () -> Unit,
     onInsertText: (String) -> Unit,
     onInsertTable: () -> Unit,
@@ -1181,11 +1171,6 @@ private fun EditorMenuBar(
             Modifier.horizontalScroll(rememberScrollState()),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // وصول سريع: تراجع/إعادة/حفظ (ضمن شريط القوائم لتوفير المساحة)
-            IconButton(onClick = onUndo, enabled = canUndo) { Icon(Icons.AutoMirrored.Filled.Undo, "تراجع") }
-            IconButton(onClick = onRedo, enabled = canRedo) { Icon(Icons.AutoMirrored.Filled.Redo, "إعادة") }
-            IconButton(onClick = onSave) { Icon(Icons.Default.Save, "حفظ") }
-            Box(Modifier.width(1.dp).height(24.dp).background(MaterialTheme.colorScheme.outlineVariant))
             MenuBarMenu("ملف", openMenu, onOpenMenu) { close ->
             MenuRow("فتح", Icons.Default.FolderOpen) { close(); onOpen() }
             MenuRow("حفظ", Icons.Default.Save) { close(); onSave() }
@@ -1256,6 +1241,27 @@ private fun EditorMenuBar(
         }
         MenuBarMenu("أدوات", openMenu, onOpenMenu) { close ->
             MenuRow("إحصائيات المستند", Icons.AutoMirrored.Filled.Notes) { close(); onStats() }
+        }
+        // مبدّل شريط التنسيق (يُفتح عند الطلب لتوفير المساحة)
+        Row(
+            Modifier.clickable { onToggleFormatBar() }.padding(horizontal = 8.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Default.FormatSize,
+                contentDescription = null,
+                tint = if (formatBarOpen) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                "تنسيق",
+                color = if (formatBarOpen) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+            )
+            Icon(
+                Icons.Default.ArrowDropDown,
+                contentDescription = if (formatBarOpen) "إخفاء شريط التنسيق" else "إظهار شريط التنسيق",
+                modifier = Modifier.rotate(if (formatBarOpen) 180f else 0f),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
         }
     }

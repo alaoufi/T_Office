@@ -137,7 +137,13 @@ class EditorViewModel @Inject constructor(
                 }
             }
             onLoaded(fileName(uri), bundle)
-            _events.emit("تم فتح الملف")
+            val empty = bundle.body.text.isBlank() && bundle.images.isEmpty() &&
+                bundle.tables.isEmpty() && bundle.afterBody.text.isBlank() && bundle.blocks.isEmpty()
+            if (empty) {
+                _events.emit("الملف فارغ أو تعذّرت قراءة محتواه — جرّب حفظه كـ .docx")
+            } else {
+                _events.emit("تم فتح الملف — أحرف: ${bundle.body.text.length}، صور: ${bundle.images.size}")
+            }
         }
     }
 
